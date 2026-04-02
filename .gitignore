@@ -1,0 +1,18 @@
+# Private content — not open-source
+content/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.env
+
+# IDE
+.vscode/
+
+# OS
+.DS_Store
