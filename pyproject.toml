@@ -1,0 +1,32 @@
+[project]
+name = "memory-vault"
+version = "0.2.0"
+description = "Local-first AI memory system with hybrid search — PostgreSQL + pgvector"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    { name = "MihaiBuilds" },
+]
+keywords = ["ai", "memory", "vector-search", "postgresql", "pgvector", "mcp"]
+
+dependencies = [
+    "psycopg[binary]>=3.1,<4",
+    "psycopg-pool>=3.1,<4",
+    "sentence-transformers>=2.2,<4",
+    "numpy>=1.24",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+]
+
+[project.scripts]
+memory-vault = "src.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends._legacy:_Backend"
