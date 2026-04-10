@@ -29,7 +29,7 @@ Memory Vault fixes that. It stores everything you want your AI to remember — d
 |-----------|--------|-------------|
 | M1 — The Announcement | ✅ Done | README, architecture overview, project vision |
 | M2 — The Core | ✅ Done | Hybrid search engine, ingestion pipeline, embeddings |
-| M3 — One Command to Start | 🔜 Next | Docker setup, `docker compose up` and it works |
+| M3 — One Command to Start | ✅ Done | Docker setup, `docker compose up` and it works |
 | M4 — Talk to Claude | ⏳ Planned | MCP server with full tool support |
 | M5 — The Dashboard | ⏳ Planned | Web UI for search, browse, ingest |
 | M6 — The REST API | ⏳ Planned | For integrations and custom clients |
@@ -41,9 +41,34 @@ Each milestone is a working, usable increment — not a placeholder, not a demo.
 
 ---
 
+## Quick Start (Docker)
+
+```bash
+git clone https://github.com/MihaiBuilds/memory-vault.git
+cd memory-vault
+docker compose up -d
+```
+
+That's it. PostgreSQL + pgvector + Memory Vault, running and ready. Migrations run automatically on first start.
+
+```bash
+# Check it's working
+docker compose exec app memory-vault status
+
+# Ingest a file
+docker compose exec app memory-vault ingest /path/to/file.md --space default
+
+# Search
+docker compose exec app memory-vault search "your query here"
+```
+
+Data persists in a Docker volume — `docker compose down` and `up` again, your memories are still there.
+
+---
+
 ## Installation (Manual)
 
-> Docker setup coming in Milestone 3. For now, manual installation:
+If you prefer running without Docker:
 
 ### Prerequisites
 
@@ -123,7 +148,7 @@ Async queue-based pipeline with adapters for different input formats:
 - **sentence-transformers** — `all-MiniLM-L6-v2` embeddings (384-d, runs on CPU)
 - **FastAPI** — REST API and dashboard serving (coming M5-M6)
 - **React** — web dashboard (coming M5)
-- **Docker** — one-command deployment (coming M3)
+- **Docker** — one-command deployment with `docker compose up`
 - **MCP** — Claude integration (coming M4)
 
 ---
@@ -143,4 +168,4 @@ A PRO tier for teams and advanced features is planned for Milestone 9.
 - GitHub: [@MihaiBuilds](https://github.com/MihaiBuilds)
 - X: [@mihaibuilds](https://x.com/mihaibuilds)
 
-> Watch the repo to follow along. The build starts now.
+> Watch the repo to follow along as each milestone ships.

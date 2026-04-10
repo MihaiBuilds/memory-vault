@@ -1,0 +1,33 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: memory_vault
+      POSTGRES_USER: memory_vault
+      POSTGRES_PASSWORD: memory_vault
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memory_vault -d memory_vault"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: memory_vault
+      DB_USER: memory_vault
+      DB_PASSWORD: memory_vault
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+
+volumes:
+  pgdata:
