@@ -45,6 +45,9 @@ def main() -> None:
     # migrate
     sub.add_parser("migrate", help="Run database migrations")
 
+    # mcp
+    sub.add_parser("mcp", help="Start the MCP server (stdio transport)")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -59,6 +62,9 @@ def main() -> None:
         asyncio.run(_cmd_search(args.query, args.space, args.limit))
     elif args.command == "status":
         asyncio.run(_cmd_status())
+    elif args.command == "mcp":
+        from src.mcp.server import main as mcp_main
+        mcp_main()
 
 
 async def _cmd_migrate() -> None:

@@ -150,7 +150,7 @@ def _build_where_clause(
     since: datetime | None,
 ) -> tuple[list[str], list[Any]]:
     """Build shared WHERE clauses for both search arms."""
-    where_clauses: list[str] = []
+    where_clauses: list[str] = ["(c.metadata->>'forgotten')::boolean IS NOT TRUE"]
     params: list[Any] = []
 
     if space_ids:

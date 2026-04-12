@@ -1,0 +1,2 @@
+# Force LF line endings for shell scripts (fixes Windows Docker issue)
+scripts/start.sh eol=lf
