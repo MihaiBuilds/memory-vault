@@ -31,8 +31,8 @@ Memory Vault fixes that. It stores everything you want your AI to remember — d
 | M2 — The Core | ✅ Done | Hybrid search engine, ingestion pipeline, embeddings |
 | M3 — One Command to Start | ✅ Done | Docker setup, `docker compose up` and it works |
 | M4 — Talk to Claude | ✅ Done | MCP server — Claude reads and writes memories mid-conversation |
-| M5 — The Dashboard | ⏳ Planned | Web UI for search, browse, ingest |
-| M6 — The REST API | ⏳ Planned | For integrations and custom clients |
+| M5 — The API | ✅ Done | REST API with bearer auth, rate limiting, OpenAPI docs |
+| M6 — The Dashboard | ⏳ Planned | Web UI for search, browse, ingest |
 | M7 — The Knowledge Graph | ⏳ Planned | Entity extraction and visualization |
 | M8 — v1.0 Release | ⏳ Planned | Local LLM chat, polish, full launch |
 | M9 — PRO Unlocked | ⏳ Planned | Team features, advanced analytics, paid tier |
@@ -63,6 +63,33 @@ docker compose exec app memory-vault search "your query here"
 ```
 
 Data persists in a Docker volume — `docker compose down` and `up` again, your memories are still there.
+
+---
+
+## Windows users — read this first
+
+If you're on Windows and you see this error when starting the container:
+
+```
+exec ./scripts/start.sh: no such file or directory
+```
+
+(and the container exits with code 255), it's a line-ending issue, not a missing file. Windows git installs default to `core.autocrlf=true`, which can rewrite `scripts/start.sh` with `\r\n` line endings. Linux then reads the shebang as `#!/bin/sh\r` and tries to run an interpreter literally named `sh\r`.
+
+Memory Vault now ships with defensive `.gitattributes` rules and strips carriage returns inside the Docker image, so fresh clones should just work. If you cloned before this fix, or you still hit the error, run this **inside the repo** — do NOT change your global git config, it will break your other Windows projects:
+
+```bash
+cd memory-vault
+git config core.autocrlf false
+git rm --cached -r .
+git reset --hard
+docker compose build --no-cache
+docker compose up -d
+```
+
+`--no-cache` matters because Docker caches the broken version in a build layer — rebuilding without it won't fix the issue.
+
+**Performance tip:** clone Memory Vault into your WSL2 filesystem (for example `~/memory-vault`), not a Windows path (`C:\Users\...`). Docker Desktop on Windows pays a significant I/O cost crossing between the Windows filesystem and the Linux VM, and search latency can drop from seconds to milliseconds when the repo lives inside WSL2.
 
 ---
 
@@ -201,6 +228,92 @@ Once configured, Claude will have access to the memory tools. Try:
 
 ---
 
+## REST API
+
+Every MCP tool is also exposed as an HTTP endpoint so you can integrate Memory Vault into any app, script, or language. The API is served by FastAPI at `http://localhost:8000` when you run `docker compose up`.
+
+- **Interactive docs:** http://localhost:8000/docs
+- **OpenAPI schema:** http://localhost:8000/openapi.json
+
+### Authentication
+
+All endpoints except `/api/health` require a bearer token. Create one via the CLI:
+
+```bash
+docker compose exec app memory-vault token create my-app
+```
+
+The plaintext token is shown **once** — copy it immediately. Then send it as a header:
+
+```bash
+curl -H "Authorization: Bearer mv_..." http://localhost:8000/api/spaces
+```
+
+Manage tokens:
+
+```bash
+memory-vault token list
+memory-vault token revoke mv_abc1234
+```
+
+To disable auth entirely (local dev only), set `API_AUTH_ENABLED=false`.
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`    | `/api/health`           | Service + database health (no auth) |
+| `GET`    | `/api/spaces`           | List memory spaces with chunk counts |
+| `POST`   | `/api/search`           | Hybrid search (vector + full-text + RRF) |
+| `GET`    | `/api/chunks`           | List chunks with pagination and filters |
+| `GET`    | `/api/chunks/{id}`      | Get a single chunk |
+| `DELETE` | `/api/chunks/{id}`      | Soft-delete (forget) a chunk |
+| `POST`   | `/api/ingest/text`      | Ingest a text string as a chunk |
+| `POST`   | `/api/ingest/file`      | Upload a file through the ingestion pipeline |
+
+### Example — search
+
+```bash
+curl -X POST http://localhost:8000/api/search \
+  -H "Authorization: Bearer $MV_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "how does hybrid search work",
+    "spaces": ["default"],
+    "limit": 5
+  }'
+```
+
+### Example — ingest text
+
+```bash
+curl -X POST http://localhost:8000/api/ingest/text \
+  -H "Authorization: Bearer $MV_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Decided to use RRF for hybrid merging", "space": "default"}'
+```
+
+### Example — upload a file
+
+```bash
+curl -X POST http://localhost:8000/api/ingest/file \
+  -H "Authorization: Bearer $MV_TOKEN" \
+  -F "file=@notes.md" \
+  -F "space=default"
+```
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `API_HOST` | `0.0.0.0` | Bind address |
+| `API_PORT` | `8000` | Port |
+| `API_AUTH_ENABLED` | `true` | Set `false` to disable bearer auth (local dev only) |
+| `API_CORS_ORIGINS` | `*` | Comma-separated allowed origins, or `*` |
+| `API_RATE_LIMIT_PER_MIN` | `120` | Per-IP request limit per minute |
+
+---
+
 ## How It Works
 
 ### Hybrid Search
@@ -232,8 +345,8 @@ Async queue-based pipeline with adapters for different input formats:
 - **PostgreSQL 16 + pgvector** — vector storage and hybrid search in one database
 - **Python 3.11+** — async backend with psycopg 3
 - **sentence-transformers** — `all-MiniLM-L6-v2` embeddings (384-d, runs on CPU)
-- **FastAPI** — REST API and dashboard serving (coming M5-M6)
-- **React** — web dashboard (coming M5)
+- **FastAPI** — REST API with bearer auth, rate limiting, and OpenAPI docs
+- **React** — web dashboard (coming M6)
 - **Docker** — one-command deployment with `docker compose up`
 - **MCP** — Claude integration via FastMCP (stdio transport)
 

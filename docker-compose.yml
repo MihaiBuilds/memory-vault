@@ -20,6 +20,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    ports:
+      - "8000:8000"
     environment:
       DB_HOST: db
       DB_PORT: 5432
@@ -28,6 +30,9 @@ services:
       DB_PASSWORD: memory_vault
       API_HOST: 0.0.0.0
       API_PORT: 8000
+      API_AUTH_ENABLED: "true"
+      API_CORS_ORIGINS: "*"
+      API_RATE_LIMIT_PER_MIN: "120"
 
 volumes:
   pgdata:

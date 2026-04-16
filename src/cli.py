@@ -6,6 +6,10 @@ Usage:
     memory-vault search <query> [--space default] [--limit 5]
     memory-vault status
     memory-vault migrate
+    memory-vault api
+    memory-vault token create <name>
+    memory-vault token revoke <prefix>
+    memory-vault token list
 """
 
 from __future__ import annotations
@@ -48,6 +52,21 @@ def main() -> None:
     # mcp
     sub.add_parser("mcp", help="Start the MCP server (stdio transport)")
 
+    # api
+    sub.add_parser("api", help="Start the REST API server (uvicorn)")
+
+    # token
+    p_token = sub.add_parser("token", help="Manage API tokens")
+    token_sub = p_token.add_subparsers(dest="token_cmd")
+
+    p_tok_create = token_sub.add_parser("create", help="Create a new API token")
+    p_tok_create.add_argument("name", help="A friendly name for the token")
+
+    p_tok_revoke = token_sub.add_parser("revoke", help="Revoke a token by prefix")
+    p_tok_revoke.add_argument("prefix", help="Token prefix (first 11 chars)")
+
+    token_sub.add_parser("list", help="List existing tokens")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -65,6 +84,14 @@ def main() -> None:
     elif args.command == "mcp":
         from src.mcp.server import main as mcp_main
         mcp_main()
+    elif args.command == "api":
+        from src.api.server import main as api_main
+        api_main()
+    elif args.command == "token":
+        if not args.token_cmd:
+            p_token.print_help()
+            sys.exit(1)
+        asyncio.run(_cmd_token(args))
 
 
 async def _cmd_migrate() -> None:
@@ -131,6 +158,46 @@ async def _cmd_search(query: str, space: str | None, limit: int) -> None:
             preview += "..."
         print(f"      {preview}")
         print()
+
+
+async def _cmd_token(args) -> None:
+    from src.models.db import init_pool, close_pool, fetch_all
+    from src.api.deps import create_token, revoke_token
+
+    await init_pool()
+    try:
+        if args.token_cmd == "create":
+            plaintext = await create_token(args.name)
+            print("")
+            print("  Token created. Copy it now — it will NOT be shown again.")
+            print("")
+            print(f"  Name:  {args.name}")
+            print(f"  Token: {plaintext}")
+            print("")
+            print("  Use it with: Authorization: Bearer <token>")
+            print("")
+        elif args.token_cmd == "revoke":
+            ok = await revoke_token(args.prefix)
+            if ok:
+                print(f"Token revoked: {args.prefix}")
+            else:
+                print(f"No active token with prefix: {args.prefix}")
+                sys.exit(1)
+        elif args.token_cmd == "list":
+            rows = await fetch_all(
+                """SELECT name, token_prefix, created_at, last_used_at, revoked_at
+                   FROM api_tokens ORDER BY created_at DESC"""
+            )
+            if not rows:
+                print("No tokens yet. Create one with: memory-vault token create <name>")
+                return
+            print(f"{'NAME':<20} {'PREFIX':<14} {'CREATED':<22} {'STATUS'}")
+            for r in rows:
+                status_txt = "revoked" if r["revoked_at"] else "active"
+                created = str(r["created_at"])[:19]
+                print(f"{r['name']:<20} {r['token_prefix']:<14} {created:<22} {status_txt}")
+    finally:
+        await close_pool()
 
 
 async def _cmd_status() -> None:

@@ -1,2 +1,14 @@
-# Force LF line endings for shell scripts (fixes Windows Docker issue)
-scripts/start.sh eol=lf
+# Force LF line endings for all text files.
+# This makes the user's core.autocrlf setting irrelevant and prevents
+# Windows CRLF from breaking shell scripts inside the Docker image.
+
+* text=auto eol=lf
+
+*.sh text eol=lf
+*.py text eol=lf
+scripts/*.sh text eol=lf
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+
+*.png binary
+*.jpg binary

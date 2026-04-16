@@ -41,9 +41,9 @@ echo "============================================"
 echo "  Memory Vault is ready"
 echo "============================================"
 echo ""
-echo "Use: docker compose exec app memory-vault <command>"
-echo "Commands: ingest, search, status, migrate"
+echo "  REST API: http://${API_HOST:-0.0.0.0}:${API_PORT:-8000}"
+echo "  Docs:     http://${API_HOST:-0.0.0.0}:${API_PORT:-8000}/docs"
 echo ""
 
-# Keep container alive until M6 adds the HTTP server
-tail -f /dev/null
+# Start the REST API (uvicorn)
+exec python -m src.cli api
