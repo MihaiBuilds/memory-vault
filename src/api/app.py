@@ -11,8 +11,9 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
@@ -66,8 +67,23 @@ def create_app() -> FastAPI:
     app.include_router(ingest.router)
 
     static_dir = Path(__file__).parent / "static"
-    if static_dir.exists() and any(static_dir.iterdir()):
-        app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
+    index_file = static_dir / "index.html"
+    if static_dir.exists() and index_file.exists():
+        app.mount(
+            "/assets",
+            StaticFiles(directory=str(static_dir / "assets")),
+            name="assets",
+        )
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def spa_fallback(request: Request, full_path: str):
+            """Serve the React bundle for any non-API path (SPA deep-link support)."""
+            if full_path.startswith(("api/", "docs", "redoc", "openapi.json")):
+                raise HTTPException(status_code=404)
+            candidate = static_dir / full_path
+            if full_path and candidate.is_file():
+                return FileResponse(candidate)
+            return FileResponse(index_file)
 
     return app
 

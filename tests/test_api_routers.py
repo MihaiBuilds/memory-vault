@@ -89,6 +89,40 @@ class TestSpaces:
         default = next(s for s in r.json()["spaces"] if s["name"] == "default")
         assert default["chunk_count"] == 0
 
+    async def test_create_space_then_ingest(self, client, auth_headers):
+        r = await client.post(
+            "/api/spaces",
+            headers=auth_headers,
+            json={"name": "work", "description": "work notes"},
+        )
+        assert r.status_code == 201
+        assert r.json()["name"] == "work"
+        assert r.json()["chunk_count"] == 0
+
+        r = await client.get("/api/spaces", headers=auth_headers)
+        names = [s["name"] for s in r.json()["spaces"]]
+        assert "work" in names
+
+        r = await client.post(
+            "/api/ingest/text",
+            headers=auth_headers,
+            json={"text": "a work memory", "space": "work"},
+        )
+        assert r.status_code == 200
+
+    async def test_create_duplicate_space_returns_409(self, client, auth_headers):
+        r = await client.post(
+            "/api/spaces", headers=auth_headers, json={"name": "default"}
+        )
+        assert r.status_code == 409
+
+    async def test_create_space_invalid_name_returns_422(self, client, auth_headers):
+        for bad in ["Work", "with space", "-leading", "has_underscore", ""]:
+            r = await client.post(
+                "/api/spaces", headers=auth_headers, json={"name": bad}
+            )
+            assert r.status_code == 422, f"expected 422 for {bad!r}"
+
 
 # ---------------------------------------------------------------------------
 # /api/ingest/text
@@ -123,6 +157,19 @@ class TestIngestText:
             json={"text": "", "space": "default"},
         )
         assert r.status_code == 422
+
+    async def test_ingest_persists_speaker(self, client, auth_headers):
+        r = await client.post(
+            "/api/ingest/text",
+            headers=auth_headers,
+            json={"text": "note from mihai", "space": "default", "speaker": "mihai"},
+        )
+        assert r.status_code == 200
+        chunk_id = r.json()["chunk_id"]
+
+        got = await client.get(f"/api/chunks/{chunk_id}", headers=auth_headers)
+        assert got.status_code == 200
+        assert got.json()["speaker"] == "mihai"
 
 
 # ---------------------------------------------------------------------------

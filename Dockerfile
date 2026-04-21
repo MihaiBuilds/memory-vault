@@ -1,6 +1,22 @@
 # Memory Vault — Docker image
 # sentence-transformers pulls PyTorch, so we use CPU-only to keep image smaller
 
+# ---------------------------------------------------------------------------
+# Stage 1 — build the React dashboard
+# ---------------------------------------------------------------------------
+FROM node:20-slim AS web-builder
+
+WORKDIR /web
+
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+
+COPY web/ ./
+RUN npm run build
+
+# ---------------------------------------------------------------------------
+# Stage 2 — Python runtime
+# ---------------------------------------------------------------------------
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -13,6 +29,9 @@ COPY pyproject.toml ./
 COPY src/ ./src/
 COPY migrations/ ./migrations/
 COPY scripts/start.sh ./scripts/start.sh
+
+# Copy the built dashboard into the static dir that FastAPI mounts at /
+COPY --from=web-builder /web/dist/ ./src/api/static/
 
 ENV PYTHONPATH=/app
 

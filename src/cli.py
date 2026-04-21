@@ -67,6 +67,16 @@ def main() -> None:
 
     token_sub.add_parser("list", help="List existing tokens")
 
+    # space
+    p_space = sub.add_parser("space", help="Manage memory spaces")
+    space_sub = p_space.add_subparsers(dest="space_cmd")
+
+    p_space_create = space_sub.add_parser("create", help="Create a new memory space")
+    p_space_create.add_argument("name", help="Space name (lowercase, hyphens allowed)")
+    p_space_create.add_argument("--description", default=None, help="Optional description")
+
+    space_sub.add_parser("list", help="List existing spaces")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -92,6 +102,11 @@ def main() -> None:
             p_token.print_help()
             sys.exit(1)
         asyncio.run(_cmd_token(args))
+    elif args.command == "space":
+        if not args.space_cmd:
+            p_space.print_help()
+            sys.exit(1)
+        asyncio.run(_cmd_space(args))
 
 
 async def _cmd_migrate() -> None:
@@ -196,6 +211,46 @@ async def _cmd_token(args) -> None:
                 status_txt = "revoked" if r["revoked_at"] else "active"
                 created = str(r["created_at"])[:19]
                 print(f"{r['name']:<20} {r['token_prefix']:<14} {created:<22} {status_txt}")
+    finally:
+        await close_pool()
+
+
+async def _cmd_space(args) -> None:
+    import re
+    from src.models.db import init_pool, close_pool, execute_query, fetch_all, fetch_one
+
+    await init_pool()
+    try:
+        if args.space_cmd == "create":
+            name = args.name.strip()
+            if not re.match(r"^[a-z0-9][a-z0-9-]*$", name) or len(name) > 64:
+                print(f"Invalid space name: {name!r}. Use lowercase letters, digits, hyphens (max 64).")
+                sys.exit(1)
+            existing = await fetch_one(
+                "SELECT 1 FROM memory_spaces WHERE name = %s", (name,)
+            )
+            if existing:
+                print(f"Space already exists: {name}")
+                sys.exit(1)
+            await execute_query(
+                "INSERT INTO memory_spaces (name, description) VALUES (%s, %s)",
+                (name, args.description),
+            )
+            print(f"Space created: {name}")
+        elif args.space_cmd == "list":
+            rows = await fetch_all(
+                """SELECT ms.name, ms.description, count(c.id) AS chunks
+                   FROM memory_spaces ms
+                   LEFT JOIN chunks c ON c.space_id = ms.id
+                   GROUP BY ms.id, ms.name, ms.description
+                   ORDER BY ms.name"""
+            )
+            if not rows:
+                print("No spaces yet.")
+                return
+            print(f"{'NAME':<20} {'CHUNKS':<8} DESCRIPTION")
+            for r in rows:
+                print(f"{r['name']:<20} {r['chunks']:<8} {r['description'] or ''}")
     finally:
         await close_pool()
 

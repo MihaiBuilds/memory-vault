@@ -30,7 +30,12 @@ async def ingest_text_endpoint(req: IngestTextRequest) -> IngestResponse:
     """Ingest a single text string as one chunk."""
     await _resolve_space_id(req.space)
     try:
-        chunk_id = await ingest_text(text=req.text, space=req.space, source=req.source)
+        chunk_id = await ingest_text(
+            text=req.text,
+            space=req.space,
+            source=req.source,
+            speaker=req.speaker,
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 

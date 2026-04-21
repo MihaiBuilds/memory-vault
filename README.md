@@ -32,7 +32,7 @@ Memory Vault fixes that. It stores everything you want your AI to remember — d
 | M3 — One Command to Start | ✅ Done | Docker setup, `docker compose up` and it works |
 | M4 — Talk to Claude | ✅ Done | MCP server — Claude reads and writes memories mid-conversation |
 | M5 — The API | ✅ Done | REST API with bearer auth, rate limiting, OpenAPI docs |
-| M6 — The Dashboard | ⏳ Planned | Web UI for search, browse, ingest |
+| M6 — The Dashboard | ✅ Done | Web UI for search, browse, ingest, stats |
 | M7 — The Knowledge Graph | ⏳ Planned | Entity extraction and visualization |
 | M8 — v1.0 Release | ⏳ Planned | Local LLM chat, polish, full launch |
 | M9 — PRO Unlocked | ⏳ Planned | Team features, advanced analytics, paid tier |
@@ -314,6 +314,51 @@ curl -X POST http://localhost:8000/api/ingest/file \
 
 ---
 
+## Dashboard
+
+Memory Vault ships with a web UI baked into the same Docker image as the API — no separate deploy, no extra port. Open `http://localhost:8000` in your browser after `docker compose up`.
+
+Four pages:
+
+- **Search** — hybrid search with space filter, similarity scores, expandable hit content
+- **Browse** — paginated chunk list with space + sort filters, two-step inline delete
+- **Ingest** — paste text or upload files (one at a time in v1.0), per-file status, batch summary
+- **Stats** — system health, total chunks, spaces table with visual distribution, auto-refresh every 30s
+
+### Access
+
+The dashboard uses the same bearer token as the API. Create one and paste it into the dashboard's token screen:
+
+```bash
+docker compose exec app memory-vault token create dashboard
+```
+
+The plaintext token is shown **once** — copy it immediately. Open `http://localhost:8000`, paste into the prompt, and the dashboard stores it in `localStorage` under `memory-vault-token`. You won't be asked again on that browser.
+
+### Rotating or revoking
+
+```bash
+# See which tokens exist
+docker compose exec app memory-vault token list
+
+# Revoke by prefix (shown in list output)
+docker compose exec app memory-vault token revoke mv_abc1234
+
+# Create a new one
+docker compose exec app memory-vault token create dashboard
+```
+
+After revoking, the dashboard will hit a 401 on its next request and auto-clear the stored token, forcing you to paste the new one.
+
+### Troubleshooting
+
+- **Prompted for token every reload:** your browser is blocking `localStorage` (private mode, strict cookie settings). Use a normal window or allow storage for `localhost`.
+- **401 on every request:** the token was revoked or `API_AUTH_ENABLED` changed. Create a fresh token and paste it in.
+- **Dashboard shows but API calls fail with CORS:** you're hitting the API on a different origin than the dashboard. The baked-in build avoids this — use `http://localhost:8000`, not the dev server, unless you know what you're doing.
+- **Running the dev server:** `cd web && npm install && npm run dev` serves the UI at `http://localhost:5173` with API calls proxied to `:8000`. For development only.
+
+---
+
 ## How It Works
 
 ### Hybrid Search
@@ -346,7 +391,7 @@ Async queue-based pipeline with adapters for different input formats:
 - **Python 3.11+** — async backend with psycopg 3
 - **sentence-transformers** — `all-MiniLM-L6-v2` embeddings (384-d, runs on CPU)
 - **FastAPI** — REST API with bearer auth, rate limiting, and OpenAPI docs
-- **React** — web dashboard (coming M6)
+- **React 19 + Vite + TanStack Query** — web dashboard, baked into the main Docker image
 - **Docker** — one-command deployment with `docker compose up`
 - **MCP** — Claude integration via FastMCP (stdio transport)
 

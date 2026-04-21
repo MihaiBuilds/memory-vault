@@ -94,6 +94,18 @@ class SpaceList(BaseModel):
     spaces: list[SpaceInfo]
 
 
+class SpaceCreateRequest(BaseModel):
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        pattern=r"^[a-z0-9][a-z0-9-]*$",
+        examples=["work", "side-projects"],
+        description="Lowercase letters, digits, and hyphens only. Must start with letter or digit.",
+    )
+    description: str | None = Field(default=None, max_length=500)
+
+
 # ---------------------------------------------------------------------------
 # Ingest
 # ---------------------------------------------------------------------------

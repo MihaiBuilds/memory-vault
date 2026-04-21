@@ -170,6 +170,7 @@ async def ingest_text(
     text: str,
     space: str = "default",
     source: str = "api",
+    speaker: str | None = None,
 ) -> str:
     """Quick-ingest a single text string. Returns the chunk ID."""
     from src.services.embedding import embed
@@ -186,8 +187,8 @@ async def ingest_text(
     embedding = embed(text)
 
     await execute_query(
-        """INSERT INTO chunks (id, space_id, content, embedding, source, chunk_index)
-           VALUES (%s, %s, %s, %s::vector, %s, 0)""",
-        (chunk_id, space_id, text, str(embedding), source),
+        """INSERT INTO chunks (id, space_id, content, embedding, source, speaker, chunk_index)
+           VALUES (%s, %s, %s, %s::vector, %s, %s, 0)""",
+        (chunk_id, space_id, text, str(embedding), source, speaker),
     )
     return chunk_id

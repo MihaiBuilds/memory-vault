@@ -1,6 +1,11 @@
 # Private content — not open-source
 content/
 
+# Local test runner — private QA gate, not shipped with the repo
+Dockerfile.test
+Dockerfile.test.dockerignore
+docker-compose.test.yml
+
 # Python
 __pycache__/
 *.py[cod]
