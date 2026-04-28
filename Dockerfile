@@ -39,6 +39,8 @@ RUN pip install --no-cache-dir . \
     && sed -i 's/\r$//' ./scripts/start.sh \
     && chmod +x ./scripts/start.sh
 
+RUN python -m spacy download en_core_web_sm
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \

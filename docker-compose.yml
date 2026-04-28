@@ -1,6 +1,10 @@
 services:
   db:
     image: pgvector/pgvector:pg16
+    command:
+      - postgres
+      - -c
+      - maintenance_work_mem=1GB
     environment:
       POSTGRES_DB: memory_vault
       POSTGRES_USER: memory_vault

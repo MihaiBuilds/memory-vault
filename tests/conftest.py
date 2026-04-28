@@ -112,7 +112,9 @@ async def _clean_tables(_test_database):
     from src.models.db import execute_query
 
     await execute_query(
-        "TRUNCATE chunks, api_tokens, query_log RESTART IDENTITY CASCADE",
+        "TRUNCATE chunks, api_tokens, query_log, "
+        "entities, entity_mentions, relationships "
+        "RESTART IDENTITY CASCADE",
         commit=True,
     )
     yield

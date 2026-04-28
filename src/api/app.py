@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
 from src.api.deps import RateLimitMiddleware
-from src.api.routers import chunks, health, ingest, search, spaces
+from src.api.routers import chunks, graph, health, ingest, search, spaces
 from src.models.db import close_pool, init_pool
 
 logger = logging.getLogger(__name__)
@@ -65,6 +65,7 @@ def create_app() -> FastAPI:
     app.include_router(chunks.router)
     app.include_router(spaces.router)
     app.include_router(ingest.router)
+    app.include_router(graph.router)
 
     static_dir = Path(__file__).parent / "static"
     index_file = static_dir / "index.html"

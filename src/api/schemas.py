@@ -123,3 +123,89 @@ class IngestResponse(BaseModel):
     chunk_id: str | None = None
     chunks_created: int = 0
     message: str
+
+
+# ---------------------------------------------------------------------------
+# Knowledge graph
+# ---------------------------------------------------------------------------
+
+
+class EntitySummary(BaseModel):
+    id: str
+    name: str
+    type: str
+    space: str
+    mention_count: int
+    created_at: datetime | None = None
+
+
+class EntityList(BaseModel):
+    entities: list[EntitySummary]
+    total: int
+    limit: int
+    offset: int
+
+
+class EntityMention(BaseModel):
+    chunk_id: str
+    start_offset: int
+    end_offset: int
+    chunk_preview: str
+
+
+class RelatedEntity(BaseModel):
+    id: str
+    name: str
+    type: str
+    co_mention_count: int
+
+
+class EntityDetail(BaseModel):
+    id: str
+    name: str
+    type: str
+    space: str
+    mention_count: int
+    created_at: datetime | None = None
+    mentions: list[EntityMention]
+    related: list[RelatedEntity]
+
+
+class RelationshipRow(BaseModel):
+    id: str
+    source_entity_id: str
+    target_entity_id: str
+    source_name: str
+    target_name: str
+    type: str
+    chunk_id: str | None = None
+    created_at: datetime | None = None
+
+
+class RelationshipList(BaseModel):
+    relationships: list[RelationshipRow]
+    total: int
+    limit: int
+    offset: int
+
+
+class GraphNode(BaseModel):
+    id: str
+    name: str
+    type: str
+    mention_count: int
+
+
+class GraphEdge(BaseModel):
+    source: str
+    target: str
+    type: str
+    weight: int
+
+
+class GraphVisualization(BaseModel):
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
+    node_count: int
+    edge_count: int
+    truncated: bool

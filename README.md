@@ -33,7 +33,7 @@ Memory Vault fixes that. It stores everything you want your AI to remember — d
 | M4 — Talk to Claude | ✅ Done | MCP server — Claude reads and writes memories mid-conversation |
 | M5 — The API | ✅ Done | REST API with bearer auth, rate limiting, OpenAPI docs |
 | M6 — The Dashboard | ✅ Done | Web UI for search, browse, ingest, stats |
-| M7 — The Knowledge Graph | ⏳ Planned | Entity extraction and visualization |
+| M7 — The Knowledge Graph | ✅ Done | Entity extraction, relationships, force-directed graph page |
 | M8 — v1.0 Release | ⏳ Planned | Local LLM chat, polish, full launch |
 | M9 — PRO Unlocked | ⏳ Planned | Team features, advanced analytics, paid tier |
 
@@ -318,10 +318,11 @@ curl -X POST http://localhost:8000/api/ingest/file \
 
 Memory Vault ships with a web UI baked into the same Docker image as the API — no separate deploy, no extra port. Open `http://localhost:8000` in your browser after `docker compose up`.
 
-Four pages:
+Five pages:
 
 - **Search** — hybrid search with space filter, similarity scores, expandable hit content
 - **Browse** — paginated chunk list with space + sort filters, two-step inline delete
+- **Graph** — force-directed knowledge graph (Cytoscape.js), pan/zoom, click a node to see its mentions and related entities, filters for space / type / min-mentions / max-nodes
 - **Ingest** — paste text or upload files (one at a time in v1.0), per-file status, batch summary
 - **Stats** — system health, total chunks, spaces table with visual distribution, auto-refresh every 30s
 
@@ -383,6 +384,45 @@ Async queue-based pipeline with adapters for different input formats:
 - **Plain text** — paragraph-based with smart merging
 - **Claude JSON** — parses Claude conversation exports
 
+### Knowledge Graph
+
+Memory Vault extracts entities and relationships from every ingested chunk and stores them alongside your memories. Click the **Graph** page in the dashboard to see how the things you've stored connect to each other.
+
+**How extraction works:**
+
+- **spaCy NER** — the small `en_core_web_sm` model (~15 MB, CPU-only) tags `PERSON`, `ORG`, and `PRODUCT` entities, mapped to **Person**, **Project**, and **Tool** respectively.
+- **Concept extraction** — multi-token noun phrases that appear at least twice within a chunk become **Concept** entities. No LLM, no API calls.
+- **Co-occurrence relationships** — any two entities found in the same chunk produce a `related_to` relationship. Edge weight grows with co-occurrence count across chunks.
+- **Per-space deduplication** — entities are deduplicated by `(lower(name), type, space)`, so the same entity stays one node within a space without merging across unrelated projects.
+
+The whole pipeline runs synchronously on ingest, on the same CPU that runs the embeddings — no extra services, no external API costs.
+
+**Honest limitations of v1.0 extraction:**
+
+- **English only.** `en_core_web_sm` is English-trained; non-English text gets little to no useful extraction. Multilingual models are a future upgrade, not a v1.0 feature.
+- **NER is context-dependent.** spaCy decides PERSON vs. ORG based on the surrounding sentence. The same name can end up as both a Person and a Project entity if it appears in different syntactic roles. A future release will add manual entity merging in the dashboard.
+- **No fuzzy matching.** "PostgreSQL" and "Postgres" are separate entities. Fuzzy/alias matching is out of scope for v1.0.
+- **No re-extraction on edit.** If you forget a chunk and ingest a corrected version, the new entities are added; the old ones aren't cleaned up automatically. Re-extraction is planned for v1.1.
+
+These trade-offs are deliberate. spaCy + co-occurrence is fast, free, and gets you 80% of the way to a useful graph at 0% of the LLM cost. The honest gaps are documented up front rather than masked.
+
+### Performance Tuning
+
+Memory Vault ships with `maintenance_work_mem = 1 GB` as the default in the bundled `docker-compose.yml`. The stock PostgreSQL default is 64 MB, which makes HNSW index builds on pgvector painfully slow once your corpus grows past a few thousand chunks.
+
+If you're running on a host with **16 GB of RAM or more**, bumping this to 2 GB gives noticeably faster index rebuilds with no downside. Edit the `command:` block in `docker-compose.yml`:
+
+```yaml
+db:
+  image: pgvector/pgvector:pg16
+  command:
+    - postgres
+    - -c
+    - maintenance_work_mem=2GB
+```
+
+If you're running on a small box (4 GB total RAM or less, e.g. a tiny VPS), you may want to drop this back down to 256 MB so the rest of the system has breathing room. Memory Vault still works at the stock 64 MB default — it's just slower on large index rebuilds.
+
 ---
 
 ## Tech Stack
@@ -390,8 +430,10 @@ Async queue-based pipeline with adapters for different input formats:
 - **PostgreSQL 16 + pgvector** — vector storage and hybrid search in one database
 - **Python 3.11+** — async backend with psycopg 3
 - **sentence-transformers** — `all-MiniLM-L6-v2` embeddings (384-d, runs on CPU)
+- **spaCy** — `en_core_web_sm` for entity extraction (CPU-only, no LLM calls)
 - **FastAPI** — REST API with bearer auth, rate limiting, and OpenAPI docs
 - **React 19 + Vite + TanStack Query** — web dashboard, baked into the main Docker image
+- **Cytoscape.js + cose-bilkent** — force-directed knowledge graph rendering on the dashboard
 - **Docker** — one-command deployment with `docker compose up`
 - **MCP** — Claude integration via FastMCP (stdio transport)
 

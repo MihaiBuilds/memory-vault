@@ -16,6 +16,11 @@ from enum import IntEnum
 from pathlib import Path
 
 from src.adapters.base import RawChunk, detect_adapter
+from src.extraction import (
+    extract_entities,
+    extract_relationships,
+    write_graph_for_chunk,
+)
 from src.models.db import execute_query, fetch_one, get_pool
 from src.services.embedding import embed_batch
 
@@ -165,6 +170,8 @@ class IngestionPipeline:
         )
         self._stats.chunks_created += 1
 
+        await _run_extraction(chunk_id, chunk.text, space_id)
+
 
 async def ingest_text(
     text: str,
@@ -191,4 +198,28 @@ async def ingest_text(
            VALUES (%s, %s, %s, %s::vector, %s, %s, 0)""",
         (chunk_id, space_id, text, str(embedding), source, speaker),
     )
+
+    await _run_extraction(chunk_id, text, space_id)
     return chunk_id
+
+
+async def _run_extraction(chunk_id: str, text: str, space_id: int) -> None:
+    """Run spaCy extraction in a thread, then persist the graph writes.
+
+    Swallows exceptions — the chunk is already committed; extraction is
+    best-effort. Graph-writer handles its own transaction boundary and
+    logs internally on failure.
+    """
+    try:
+        entities = await asyncio.to_thread(extract_entities, text)
+        relationships = await asyncio.to_thread(
+            extract_relationships, entities, text
+        )
+    except Exception:
+        logger.exception(
+            "Extraction failed for chunk %s — graph data absent, chunk retained",
+            chunk_id,
+        )
+        return
+
+    await write_graph_for_chunk(chunk_id, space_id, entities, relationships)

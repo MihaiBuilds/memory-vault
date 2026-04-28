@@ -12,12 +12,15 @@
   "dependencies": {
     "@tanstack/react-query": "^5.99.0",
     "@tanstack/react-query-devtools": "^5.99.0",
+    "cytoscape": "^3.30.4",
+    "cytoscape-cose-bilkent": "^4.1.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.14.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@types/cytoscape": "^3.21.9",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

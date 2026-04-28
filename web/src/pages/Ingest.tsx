@@ -143,7 +143,7 @@ function TextTab() {
   const qc = useQueryClient()
   const [text, setText] = useState('')
   const [space, setSpace] = useState('default')
-  const [source, setSource] = useState('api')
+  const [source, setSource] = useState('')
   const [speaker, setSpeaker] = useState('')
   const [spaceError, setSpaceError] = useState<string | null>(null)
 

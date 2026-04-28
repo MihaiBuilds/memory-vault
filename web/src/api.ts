@@ -88,6 +88,60 @@ export interface ListChunksParams {
   include_forgotten?: boolean
 }
 
+export interface GraphNode {
+  id: string
+  name: string
+  type: string
+  mention_count: number
+}
+
+export interface GraphEdge {
+  source: string
+  target: string
+  type: string
+  weight: number
+}
+
+export interface GraphVisualization {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+  node_count: number
+  edge_count: number
+  truncated: boolean
+}
+
+export interface EntityMention {
+  chunk_id: string
+  start_offset: number
+  end_offset: number
+  chunk_preview: string
+}
+
+export interface RelatedEntity {
+  id: string
+  name: string
+  type: string
+  co_mention_count: number
+}
+
+export interface EntityDetail {
+  id: string
+  name: string
+  type: string
+  space: string
+  mention_count: number
+  created_at: string | null
+  mentions: EntityMention[]
+  related: RelatedEntity[]
+}
+
+export interface GraphVisualizeParams {
+  space?: string
+  type?: string
+  min_mentions?: number
+  max_nodes?: number
+}
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -181,4 +235,10 @@ export const api = {
       body: form,
     })
   },
+
+  graphVisualize: (params: GraphVisualizeParams = {}) =>
+    request<GraphVisualization>(`/api/graph/visualize${qs(params as Record<string, unknown>)}`),
+
+  getEntity: (entityId: string) =>
+    request<EntityDetail>(`/api/graph/entities/${encodeURIComponent(entityId)}`),
 }
