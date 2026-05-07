@@ -142,6 +142,47 @@ export interface GraphVisualizeParams {
   max_nodes?: number
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface ChatSource {
+  chunk_id: string
+  content: string
+  similarity: number
+  space: string
+  speaker: string | null
+  source: string | null
+  created_at: string | null
+}
+
+export interface ChatRequest {
+  question: string
+  history?: ChatMessage[]
+  spaces?: string[]
+  limit?: number
+  llm_url?: string
+  model?: string | null
+  llm_api_key?: string | null
+}
+
+export interface ChatResponse {
+  answer: string
+  sources: ChatSource[]
+  model: string
+  query_time_ms: number
+  llm_time_ms: number
+  status: string
+  message: string | null
+}
+
+export type ChatStreamEvent =
+  | { type: 'sources'; sources: ChatSource[]; query_time_ms: number }
+  | { type: 'delta'; text: string }
+  | { type: 'done'; model: string; llm_time_ms: number }
+  | { type: 'error'; message: string }
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -241,4 +282,71 @@ export const api = {
 
   getEntity: (entityId: string) =>
     request<EntityDetail>(`/api/graph/entities/${encodeURIComponent(entityId)}`),
+
+  chat: (body: ChatRequest) =>
+    request<ChatResponse>('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+}
+
+export async function* chatStream(
+  body: ChatRequest,
+  signal?: AbortSignal,
+): AsyncGenerator<ChatStreamEvent> {
+  const token = getToken()
+  const headers = new Headers({ 'Content-Type': 'application/json', Accept: 'text/event-stream' })
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  const res = await fetch('/api/chat/stream', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+    signal,
+  })
+
+  if (res.status === 401) {
+    clearToken()
+    window.location.reload()
+    throw new ApiError(401, 'Unauthorized')
+  }
+  if (!res.ok || !res.body) {
+    let detail = res.statusText
+    try {
+      const errBody = await res.json()
+      if (errBody?.detail) detail = typeof errBody.detail === 'string' ? errBody.detail : JSON.stringify(errBody.detail)
+    } catch {
+      // ignore
+    }
+    throw new ApiError(res.status, detail)
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      let sep: number
+      while ((sep = buffer.indexOf('\n\n')) !== -1) {
+        const frame = buffer.slice(0, sep)
+        buffer = buffer.slice(sep + 2)
+        const dataLine = frame.split('\n').find((l) => l.startsWith('data:'))
+        if (!dataLine) continue
+        const payload = dataLine.slice(5).trim()
+        if (!payload) continue
+        try {
+          yield JSON.parse(payload) as ChatStreamEvent
+        } catch {
+          // skip malformed frame
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
 }

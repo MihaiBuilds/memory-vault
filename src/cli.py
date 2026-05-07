@@ -16,13 +16,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import logging
 import sys
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+from src.logging_config import configure_logging
+
+configure_logging()
 
 
 def main() -> None:
@@ -77,6 +75,17 @@ def main() -> None:
 
     space_sub.add_parser("list", help="List existing spaces")
 
+    # diagnose
+    p_diag = sub.add_parser(
+        "diagnose",
+        help="Bundle logs + status + config into a redacted zip for bug reports",
+    )
+    p_diag.add_argument(
+        "--out-dir",
+        default=None,
+        help="Directory to write the zip into (default: current directory)",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -93,9 +102,11 @@ def main() -> None:
         asyncio.run(_cmd_status())
     elif args.command == "mcp":
         from src.mcp.server import main as mcp_main
+
         mcp_main()
     elif args.command == "api":
         from src.api.server import main as api_main
+
         api_main()
     elif args.command == "token":
         if not args.token_cmd:
@@ -107,10 +118,16 @@ def main() -> None:
             p_space.print_help()
             sys.exit(1)
         asyncio.run(_cmd_space(args))
+    elif args.command == "diagnose":
+        from pathlib import Path
+
+        from src.diagnose import cli_diagnose
+
+        cli_diagnose(Path(args.out_dir) if args.out_dir else None)
 
 
 async def _cmd_migrate() -> None:
-    from src.models.db import init_pool, run_migrations, close_pool
+    from src.models.db import close_pool, init_pool, run_migrations
 
     await init_pool()
     await run_migrations()
@@ -120,7 +137,8 @@ async def _cmd_migrate() -> None:
 
 async def _cmd_ingest(file_path: str, space: str) -> None:
     from pathlib import Path
-    from src.models.db import init_pool, fetch_one, close_pool
+
+    from src.models.db import close_pool, fetch_one, init_pool
     from src.services.ingestion import IngestionPipeline
 
     path = Path(file_path)
@@ -130,9 +148,7 @@ async def _cmd_ingest(file_path: str, space: str) -> None:
 
     await init_pool()
 
-    row = await fetch_one(
-        "SELECT id FROM memory_spaces WHERE name = %s", (space,)
-    )
+    row = await fetch_one("SELECT id FROM memory_spaces WHERE name = %s", (space,))
     if not row:
         print(f"Unknown space: {space}")
         await close_pool()
@@ -144,24 +160,25 @@ async def _cmd_ingest(file_path: str, space: str) -> None:
     stats = await pipeline.run_all()
 
     await close_pool()
-    print(f"Ingested: {stats.chunks_created} chunks created, "
-          f"{stats.failed} failed")
+    print(f"Ingested: {stats.chunks_created} chunks created, {stats.failed} failed")
 
 
 async def _cmd_search(query: str, space: str | None, limit: int) -> None:
-    from src.models.db import init_pool, close_pool
+    from src.models.db import close_pool, init_pool
     from src.services.search import hybrid_search, resolve_space_names
 
     await init_pool()
 
     space_ids = await resolve_space_names([space] if space else None)
     results, variations, elapsed_ms = await hybrid_search(
-        query, space_ids=space_ids or None, limit=limit,
+        query,
+        space_ids=space_ids or None,
+        limit=limit,
     )
 
     await close_pool()
 
-    print(f"\nSearch: \"{query}\"")
+    print(f'\nSearch: "{query}"')
     print(f"Variations: {variations}")
     print(f"Results: {len(results)} ({elapsed_ms}ms)\n")
 
@@ -176,8 +193,8 @@ async def _cmd_search(query: str, space: str | None, limit: int) -> None:
 
 
 async def _cmd_token(args) -> None:
-    from src.models.db import init_pool, close_pool, fetch_all
     from src.api.deps import create_token, revoke_token
+    from src.models.db import close_pool, fetch_all, init_pool
 
     await init_pool()
     try:
@@ -217,18 +234,19 @@ async def _cmd_token(args) -> None:
 
 async def _cmd_space(args) -> None:
     import re
-    from src.models.db import init_pool, close_pool, execute_query, fetch_all, fetch_one
+
+    from src.models.db import close_pool, execute_query, fetch_all, fetch_one, init_pool
 
     await init_pool()
     try:
         if args.space_cmd == "create":
             name = args.name.strip()
             if not re.match(r"^[a-z0-9][a-z0-9-]*$", name) or len(name) > 64:
-                print(f"Invalid space name: {name!r}. Use lowercase letters, digits, hyphens (max 64).")
+                print(
+                    f"Invalid space name: {name!r}. Use lowercase letters, digits, hyphens (max 64)."
+                )
                 sys.exit(1)
-            existing = await fetch_one(
-                "SELECT 1 FROM memory_spaces WHERE name = %s", (name,)
-            )
+            existing = await fetch_one("SELECT 1 FROM memory_spaces WHERE name = %s", (name,))
             if existing:
                 print(f"Space already exists: {name}")
                 sys.exit(1)
@@ -256,7 +274,7 @@ async def _cmd_space(args) -> None:
 
 
 async def _cmd_status() -> None:
-    from src.models.db import init_pool, fetch_one, fetch_all, health_check, close_pool
+    from src.models.db import close_pool, fetch_all, fetch_one, health_check, init_pool
 
     await init_pool()
 

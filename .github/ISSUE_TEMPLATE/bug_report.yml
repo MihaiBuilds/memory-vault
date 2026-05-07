@@ -1,0 +1,107 @@
+name: Bug report
+description: Report something that's broken or behaving unexpectedly
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in as much as you can — vague reports often get parked.
+
+        **Before opening:**
+        - Search existing issues to avoid duplicates
+        - For setup help or "how do I…" questions, use [Discussions](https://github.com/MihaiBuilds/memory-vault/discussions) instead
+        - For security vulnerabilities, **do not open an issue** — see [SECURITY.md](https://github.com/MihaiBuilds/memory-vault/blob/main/SECURITY.md)
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear, concise description of the bug.
+      placeholder: When I do X, Y happens instead of Z.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How to reproduce
+      description: Step-by-step. The smaller the repro, the faster the fix.
+      placeholder: |
+        1. Run `docker compose up -d`
+        2. POST `/api/chunks` with body `{ ... }`
+        3. Observe error in response
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: input
+    id: request-id
+    attributes:
+      label: X-Request-ID (if applicable)
+      description: Every API response includes an `X-Request-ID` header. If the bug happened during an HTTP request, paste the ID here so the exact log lines can be located.
+      placeholder: e.g. 4f3a9b1c8d2e4f6a9c0b1d2e3f4a5b6c
+
+  - type: textarea
+    id: diagnostic
+    attributes:
+      label: Diagnostic bundle
+      description: |
+        **Run the diagnostic bundler and attach the resulting zip** (drag it into the comment box below — GitHub accepts zip uploads).
+
+        ```bash
+        docker compose exec app memory-vault diagnose
+        # or, on the host:
+        memory-vault diagnose
+        ```
+
+        The bundle includes recent logs, `memory-vault status`, platform info, and Docker state. Bearer tokens, API keys, and DB passwords are auto-redacted — but **review the zip before posting**. Redaction is a safety net, not a guarantee.
+
+        If you can't run `diagnose` (e.g. the app won't start), paste relevant log lines here instead.
+      placeholder: Drag-and-drop the diagnostic zip here, or paste log lines if the bundler can't run.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Memory Vault version
+      description: Output of `memory-vault status` or the Docker image tag (e.g. `v1.0.0`).
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How are you running Memory Vault?
+      options:
+        - Docker Compose (recommended)
+        - Docker (standalone)
+        - Local Python (dev)
+        - Other (describe in "What happened?")
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Host OS
+      placeholder: e.g. macOS 14.5, Ubuntu 22.04, Windows 11 + WSL2
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing issues and didn't find a duplicate
+          required: true
+        - label: I reviewed the diagnostic zip for sensitive content before attaching
+          required: true

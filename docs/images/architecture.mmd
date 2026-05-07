@@ -1,0 +1,51 @@
+%% Memory Vault — system architecture (v1.0)
+%% Render to PNG:  docker run --rm -v $(pwd):/data minlag/mermaid-cli -i /data/docs/images/architecture.mmd -o /data/docs/images/architecture.png -b transparent -w 1600
+%% Source of truth for the diagram lives here; PNG is regenerated, not hand-edited.
+
+flowchart LR
+    %% ---------- Consumers (left) ----------
+    subgraph Consumers["Consumers"]
+        direction TB
+        MCP["MCP clients<br/><i>Claude Desktop / Code</i>"]
+        DASH["Dashboard<br/><i>React SPA</i>"]
+        REST["Your app<br/><i>via REST API</i>"]
+        CHAT["Local LLM chat<br/><i>LM Studio / Ollama</i>"]
+    end
+
+    %% ---------- Memory Vault core (middle) ----------
+    subgraph MV["Memory Vault &nbsp;&nbsp; (single Docker container)"]
+        direction TB
+        API["FastAPI<br/>+ MCP server<br/>+ bearer auth"]
+        SEARCH["Hybrid search<br/><i>vector · tsvector · RRF</i>"]
+        GRAPH["Knowledge graph<br/><i>spaCy NER + relationships</i>"]
+        INGEST["Ingestion<br/><i>markdown · plaintext · Claude JSON</i>"]
+    end
+
+    %% ---------- Storage (right) ----------
+    subgraph Storage["Storage"]
+        direction TB
+        PG[("Postgres 16<br/>+ pgvector<br/><i>HNSW + GIN indexes</i>")]
+    end
+
+    %% ---------- Edges ----------
+    MCP  -->|"recall · remember<br/>forget · status"| API
+    DASH -->|"REST + bearer"| API
+    REST -->|"REST + bearer"| API
+    CHAT -->|"RAG + SSE"| API
+
+    API --> SEARCH
+    API --> GRAPH
+    API --> INGEST
+
+    SEARCH --> PG
+    GRAPH  --> PG
+    INGEST --> PG
+
+    %% ---------- Styling ----------
+    classDef consumer fill:#1e293b,stroke:#475569,stroke-width:1px,color:#e2e8f0
+    classDef core fill:#0f766e,stroke:#14b8a6,stroke-width:1.5px,color:#f0fdfa
+    classDef store fill:#1e3a8a,stroke:#3b82f6,stroke-width:1.5px,color:#dbeafe
+
+    class MCP,DASH,REST,CHAT consumer
+    class API,SEARCH,GRAPH,INGEST core
+    class PG store

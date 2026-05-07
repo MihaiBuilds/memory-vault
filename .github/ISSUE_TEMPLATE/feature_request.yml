@@ -1,0 +1,57 @@
+name: Feature request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Memory Vault is a single-maintainer project with a deliberately small scope. Feature requests that frame a real problem are far more likely to land than ones that propose a solution in a vacuum.
+
+        **Before opening:**
+        - Check the [Limitations section in the README](https://github.com/MihaiBuilds/memory-vault#limitations) — if it overlaps a documented v1.0 limitation, +1 the existing issue instead of opening a new one
+        - Search existing issues for duplicates
+        - Big features (new endpoints, new UI pages, new integrations) need to be discussed *before* any code is written
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the use case, not the solution. "I can't do X because Y" beats "please add Z."
+      placeholder: When I'm doing X, I run into Y, which means I can't…
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution (optional)
+      description: If you have a specific idea for how to address it, share it here. Otherwise leave blank — sometimes the best solution isn't the obvious one.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+      description: Workarounds, other tools, or different approaches you've thought through.
+
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Which tier should this land in?
+      description: Memory Vault uses an open-core model. Some features are intentionally PRO-only (multi-user, encrypted backups, conflict resolution, etc.).
+      options:
+        - Free / open-source core
+        - PRO tier (paid)
+        - Not sure — let's discuss
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I checked the README's Limitations section and this isn't a known v1.0 gap
+          required: true
+        - label: I searched existing issues for duplicates
+          required: true

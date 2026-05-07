@@ -10,13 +10,12 @@ produces, so mocking would test the mock, not the code.
 from __future__ import annotations
 
 from src.extraction.spacy_extractor import (
+    _SPACY_READY,
     Entity,
     Relationship,
-    _SPACY_READY,
     extract_entities,
     extract_relationships,
 )
-
 
 # ---------------------------------------------------------------------------
 # extract_entities
@@ -80,8 +79,7 @@ def test_concept_first_seen_casing_preserved():
     # returns") and doesn't NER-tag it as a PERSON (which capital-letter
     # phrasings can trigger).
     text = (
-        "The memory system uses hybrid search. "
-        "Over time, hybrid search beats pure vector search."
+        "The memory system uses hybrid search. Over time, hybrid search beats pure vector search."
     )
     entities = extract_entities(text)
     concepts = [e for e in entities if e.type == "Concept" and e.name.lower() == "hybrid search"]

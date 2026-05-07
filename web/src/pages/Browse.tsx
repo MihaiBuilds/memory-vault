@@ -39,6 +39,7 @@ export default function BrowsePage() {
   })
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOffset(0)
   }, [space, sort])
 

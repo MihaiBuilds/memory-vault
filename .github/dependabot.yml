@@ -1,0 +1,59 @@
+version: 2
+updates:
+  # Python dependencies (pyproject.toml)
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "Europe/Bucharest"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "deps(python)"
+    groups:
+      python-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # Web dependencies (web/package.json)
+  - package-ecosystem: npm
+    directory: "/web"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: "Europe/Bucharest"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "deps(web)"
+    groups:
+      web-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # GitHub Actions versions
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "deps(ci)"
+
+  # Docker base image
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "deps(docker)"

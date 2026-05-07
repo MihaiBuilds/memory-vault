@@ -37,6 +37,10 @@ services:
       API_AUTH_ENABLED: "true"
       API_CORS_ORIGINS: "*"
       API_RATE_LIMIT_PER_MIN: "120"
+      LOG_LEVEL: "INFO"
+    volumes:
+      - app_logs:/var/log/memory-vault
 
 volumes:
   pgdata:
+  app_logs:

@@ -3,12 +3,11 @@ Tests for source adapters — Markdown, PlainText, Claude JSON, and auto-detecti
 """
 
 import json
-import pytest
 
 from src.adapters.base import RawChunk, _word_count, detect_adapter
+from src.adapters.claude import ClaudeJsonAdapter
 from src.adapters.markdown import MarkdownAdapter
 from src.adapters.plaintext import PlainTextAdapter
-from src.adapters.claude import ClaudeJsonAdapter
 
 
 class TestRawChunk:
@@ -92,11 +91,13 @@ class TestPlainTextAdapter:
         assert self.adapter.source_name() == "plaintext"
 
     def test_short_paragraphs_merged(self):
-        text = "\n\n".join([
-            "First paragraph about the project.",
-            "Second paragraph about design.",
-            "Third paragraph about implementation.",
-        ])
+        text = "\n\n".join(
+            [
+                "First paragraph about the project.",
+                "Second paragraph about design.",
+                "Third paragraph about implementation.",
+            ]
+        )
         chunks = self.adapter.parse(text, source_path="notes.txt")
         assert len(chunks) == 1  # short paragraphs merge
 
@@ -119,60 +120,86 @@ class TestClaudeJsonAdapter:
         assert self.adapter.source_name() == "claude"
 
     def test_single_conversation(self):
-        data = json.dumps({
-            "uuid": "conv-1",
-            "name": "Test Conversation",
-            "created_at": "2025-03-01T10:00:00Z",
-            "chat_messages": [
-                {"uuid": "m1", "text": "Hello Claude", "sender": "human",
-                 "created_at": "2025-03-01T10:00:01Z"},
-                {"uuid": "m2", "text": "Hello! How can I help?", "sender": "assistant",
-                 "created_at": "2025-03-01T10:00:02Z"},
-            ],
-        })
+        data = json.dumps(
+            {
+                "uuid": "conv-1",
+                "name": "Test Conversation",
+                "created_at": "2025-03-01T10:00:00Z",
+                "chat_messages": [
+                    {
+                        "uuid": "m1",
+                        "text": "Hello Claude",
+                        "sender": "human",
+                        "created_at": "2025-03-01T10:00:01Z",
+                    },
+                    {
+                        "uuid": "m2",
+                        "text": "Hello! How can I help?",
+                        "sender": "assistant",
+                        "created_at": "2025-03-01T10:00:02Z",
+                    },
+                ],
+            }
+        )
         chunks = self.adapter.parse(data, source_path="conv.json")
         assert len(chunks) == 2
         assert chunks[0].speaker == "human"
         assert chunks[1].speaker == "assistant"
 
     def test_conversation_array(self):
-        data = json.dumps([
-            {
-                "uuid": "c1", "name": "Conv 1", "created_at": "2025-01-01T00:00:00Z",
-                "chat_messages": [
-                    {"uuid": "m1", "text": "Hello", "sender": "human"},
-                ],
-            },
-            {
-                "uuid": "c2", "name": "Conv 2", "created_at": "2025-01-02T00:00:00Z",
-                "chat_messages": [
-                    {"uuid": "m2", "text": "World", "sender": "assistant"},
-                ],
-            },
-        ])
+        data = json.dumps(
+            [
+                {
+                    "uuid": "c1",
+                    "name": "Conv 1",
+                    "created_at": "2025-01-01T00:00:00Z",
+                    "chat_messages": [
+                        {"uuid": "m1", "text": "Hello", "sender": "human"},
+                    ],
+                },
+                {
+                    "uuid": "c2",
+                    "name": "Conv 2",
+                    "created_at": "2025-01-02T00:00:00Z",
+                    "chat_messages": [
+                        {"uuid": "m2", "text": "World", "sender": "assistant"},
+                    ],
+                },
+            ]
+        )
         chunks = self.adapter.parse(data, source_path="export.json")
         assert len(chunks) == 2
 
     def test_empty_messages_skipped(self):
-        data = json.dumps({
-            "uuid": "c1", "name": "Test",
-            "chat_messages": [
-                {"uuid": "m1", "text": "", "sender": "human"},
-                {"uuid": "m2", "text": "Real content", "sender": "assistant"},
-            ],
-        })
+        data = json.dumps(
+            {
+                "uuid": "c1",
+                "name": "Test",
+                "chat_messages": [
+                    {"uuid": "m1", "text": "", "sender": "human"},
+                    {"uuid": "m2", "text": "Real content", "sender": "assistant"},
+                ],
+            }
+        )
         chunks = self.adapter.parse(data, source_path="test.json")
         assert len(chunks) == 1
 
     def test_metadata_populated(self):
-        data = json.dumps({
-            "uuid": "conv-123", "name": "My Conv",
-            "created_at": "2025-06-01T00:00:00Z",
-            "chat_messages": [
-                {"uuid": "msg-1", "text": "Test message", "sender": "human",
-                 "created_at": "2025-06-01T00:01:00Z"},
-            ],
-        })
+        data = json.dumps(
+            {
+                "uuid": "conv-123",
+                "name": "My Conv",
+                "created_at": "2025-06-01T00:00:00Z",
+                "chat_messages": [
+                    {
+                        "uuid": "msg-1",
+                        "text": "Test message",
+                        "sender": "human",
+                        "created_at": "2025-06-01T00:01:00Z",
+                    },
+                ],
+            }
+        )
         chunks = self.adapter.parse(data, source_path="test.json")
         meta = chunks[0].metadata
         assert meta["conversation_id"] == "conv-123"

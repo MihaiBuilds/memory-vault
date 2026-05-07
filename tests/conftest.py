@@ -34,7 +34,6 @@ import psycopg  # noqa: E402
 import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 
-
 ADMIN_DSN = (
     f"postgresql://{os.environ['DB_USER']}:{os.environ['DB_PASSWORD']}"
     f"@{os.environ['DB_HOST']}:{os.environ['DB_PORT']}/postgres"
@@ -65,7 +64,7 @@ def _drop_and_create_db() -> None:
     with psycopg.connect(ADMIN_DSN, autocommit=True) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"""SELECT pg_terminate_backend(pid)
+                """SELECT pg_terminate_backend(pid)
                     FROM pg_stat_activity
                     WHERE datname = %s AND pid <> pg_backend_pid()""",
                 (TEST_DB_NAME,),
@@ -78,7 +77,7 @@ def _drop_db() -> None:
     with psycopg.connect(ADMIN_DSN, autocommit=True) as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"""SELECT pg_terminate_backend(pid)
+                """SELECT pg_terminate_backend(pid)
                     FROM pg_stat_activity
                     WHERE datname = %s AND pid <> pg_backend_pid()""",
                 (TEST_DB_NAME,),
@@ -95,7 +94,7 @@ async def _test_database():
     """
     _drop_and_create_db()
 
-    from src.models.db import init_pool, run_migrations, close_pool
+    from src.models.db import close_pool, init_pool, run_migrations
 
     await init_pool(min_size=1, max_size=5)
     await run_migrations()

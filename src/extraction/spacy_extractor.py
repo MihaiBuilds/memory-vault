@@ -38,7 +38,7 @@ _MIN_CONCEPT_OCCURRENCES = 2
 @dataclass
 class Entity:
     name: str
-    type: str            # "Person" | "Project" | "Tool" | "Concept"
+    type: str  # "Person" | "Project" | "Tool" | "Concept"
     start: int
     end: int
 
@@ -47,7 +47,7 @@ class Entity:
 class Relationship:
     source_name: str
     target_name: str
-    type: str            # "related_to" (M7); other types reserved for future milestones
+    type: str  # "related_to" (M7); other types reserved for future milestones
 
 
 # Lazy-loaded module-level spaCy pipeline. None until first call or failed load.

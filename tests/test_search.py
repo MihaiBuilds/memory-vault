@@ -5,9 +5,7 @@ These tests don't require a database connection — they test the pure logic.
 Integration tests with the full hybrid search pipeline require a running PostgreSQL.
 """
 
-import pytest
-
-from src.services.search import expand_query, _build_tsquery, _STOP_WORDS
+from src.services.search import _build_tsquery, expand_query
 
 
 class TestExpandQuery:
@@ -32,7 +30,9 @@ class TestExpandQuery:
         assert len(variations) >= 1
 
     def test_max_three_variations(self):
-        variations = expand_query("What are the best practices for building scalable vector search systems?")
+        variations = expand_query(
+            "What are the best practices for building scalable vector search systems?"
+        )
         assert len(variations) <= 3
 
 

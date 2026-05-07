@@ -22,6 +22,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "pydantic>=2.5,<3",
     "spacy>=3.7,<4",
+    "structlog>=24.1,<26",
 ]
 
 [project.optional-dependencies]
@@ -29,7 +30,23 @@ dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
     "httpx>=0.27",
+    "ruff>=0.6",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["web", "content", "logs", "docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = [
+    "E501",  # line-length handled by formatter; soft-wrap is fine
+    "B008",  # FastAPI's Depends()/File()/Form() in defaults is the documented pattern
+]
+
+[tool.ruff.format]
+quote-style = "double"
 
 [project.scripts]
 memory-vault = "src.cli:main"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -53,23 +53,32 @@ async def list_chunks(
         params.append(space)
 
     where_sql = "WHERE " + " AND ".join(where) if where else ""
-    order_sql = "ORDER BY c.created_at DESC" if sort == "recent" else "ORDER BY c.importance DESC, c.created_at DESC"
+    order_sql = (
+        "ORDER BY c.created_at DESC"
+        if sort == "recent"
+        else "ORDER BY c.importance DESC, c.created_at DESC"
+    )
 
+    # nosec B608 — `where_sql` is composed from a closed list of literal
+    # template strings ("ms.name = %s", etc.); user values flow through %s
+    # parameters in `params`. No user-controlled SQL fragments.
     total_row = await fetch_one(
         f"""SELECT COUNT(*) AS n
             FROM chunks c JOIN memory_spaces ms ON ms.id = c.space_id
-            {where_sql}""",
+            {where_sql}""",  # nosec B608
         tuple(params) if params else None,
     )
     total = int(total_row["n"]) if total_row else 0
 
+    # nosec B608 — same as above; `order_sql` is also drawn from a closed
+    # set of literal templates picked by the validated `sort` enum.
     rows = await fetch_all(
         f"""SELECT c.id, c.content, c.source, c.speaker, c.importance,
                    c.created_at, c.metadata, ms.name AS space
             FROM chunks c JOIN memory_spaces ms ON ms.id = c.space_id
             {where_sql}
             {order_sql}
-            LIMIT %s OFFSET %s""",
+            LIMIT %s OFFSET %s""",  # nosec B608
         tuple([*params, limit, offset]),
     )
 
@@ -107,7 +116,10 @@ async def forget_chunk(chunk_id: str) -> ForgetResponse:
 
     meta = row["metadata"] or {}
     if isinstance(meta, str):
-        meta = json.loads(meta)
+        try:
+            meta = json.loads(meta)
+        except (json.JSONDecodeError, TypeError):
+            meta = {}
 
     if meta.get("forgotten"):
         raise HTTPException(
@@ -116,7 +128,7 @@ async def forget_chunk(chunk_id: str) -> ForgetResponse:
         )
 
     meta["forgotten"] = True
-    meta["forgotten_at"] = datetime.now(timezone.utc).isoformat()
+    meta["forgotten_at"] = datetime.now(UTC).isoformat()
 
     await execute_query(
         """UPDATE chunks

@@ -22,7 +22,7 @@ class Settings:
     db_password: str = os.getenv("DB_PASSWORD", "memory_vault")
 
     # API
-    api_host: str = os.getenv("API_HOST", "0.0.0.0")
+    api_host: str = os.getenv("API_HOST", "0.0.0.0")  # nosec B104 — Memory Vault is designed to run inside a Docker container; binding 0.0.0.0 is required to be reachable from the host. Operators expose only :8000 from compose.
     api_port: int = int(os.getenv("API_PORT", "8000"))
 
     # Embedding

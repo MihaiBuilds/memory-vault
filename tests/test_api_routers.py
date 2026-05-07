@@ -15,7 +15,6 @@ import io
 
 import pytest
 
-
 pytestmark = pytest.mark.asyncio
 
 
@@ -111,16 +110,20 @@ class TestSpaces:
         assert r.status_code == 200
 
     async def test_create_duplicate_space_returns_409(self, client, auth_headers):
-        r = await client.post(
-            "/api/spaces", headers=auth_headers, json={"name": "default"}
-        )
+        # Create a non-reserved space, then attempt to create it again.
+        # `memory_spaces` is not truncated between tests, so use a unique name.
+        r = await client.post("/api/spaces", headers=auth_headers, json={"name": "duplicates"})
+        assert r.status_code in (201, 409)
+        r = await client.post("/api/spaces", headers=auth_headers, json={"name": "duplicates"})
         assert r.status_code == 409
+
+    async def test_create_reserved_space_returns_400(self, client, auth_headers):
+        r = await client.post("/api/spaces", headers=auth_headers, json={"name": "default"})
+        assert r.status_code == 400
 
     async def test_create_space_invalid_name_returns_422(self, client, auth_headers):
         for bad in ["Work", "with space", "-leading", "has_underscore", ""]:
-            r = await client.post(
-                "/api/spaces", headers=auth_headers, json={"name": bad}
-            )
+            r = await client.post("/api/spaces", headers=auth_headers, json={"name": bad})
             assert r.status_code == 422, f"expected 422 for {bad!r}"
 
 
@@ -306,9 +309,7 @@ class TestChunks:
         assert r.status_code == 404
 
     async def test_delete_chunk_soft_deletes(self, client, auth_headers):
-        chunk_id = await self._ingest(
-            client, auth_headers, "this chunk will be forgotten"
-        )
+        chunk_id = await self._ingest(client, auth_headers, "this chunk will be forgotten")
 
         r = await client.delete(f"/api/chunks/{chunk_id}", headers=auth_headers)
         assert r.status_code == 200

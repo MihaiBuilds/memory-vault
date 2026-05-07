@@ -37,7 +37,8 @@ ENV PYTHONPATH=/app
 
 RUN pip install --no-cache-dir . \
     && sed -i 's/\r$//' ./scripts/start.sh \
-    && chmod +x ./scripts/start.sh
+    && chmod +x ./scripts/start.sh \
+    && mkdir -p /var/log/memory-vault
 
 RUN python -m spacy download en_core_web_sm
 

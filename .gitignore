@@ -15,7 +15,16 @@ build/
 .venv/
 venv/
 .env
+.env.local
+.env.*.local
 .pytest_cache/
+
+# Secrets — never commit
+*.pem
+*.key
+*.crt
+tokens.json
+secrets.json
 
 # IDE
 .vscode/

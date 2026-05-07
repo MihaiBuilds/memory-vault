@@ -19,7 +19,6 @@ _SPEAKER_MAP = {
 
 
 class ClaudeJsonAdapter(SourceAdapter):
-
     def source_name(self) -> str:
         return "claude"
 
@@ -60,13 +59,15 @@ class ClaudeJsonAdapter(SourceAdapter):
 
                 parts = _split_long_text(text, max_words=500)
                 for part_text in parts:
-                    chunks.append(RawChunk(
-                        text=part_text,
-                        speaker=speaker,
-                        timestamp=msg_ts or conv_created,
-                        chunk_index=global_index,
-                        metadata={**base_meta},
-                    ))
+                    chunks.append(
+                        RawChunk(
+                            text=part_text,
+                            speaker=speaker,
+                            timestamp=msg_ts or conv_created,
+                            chunk_index=global_index,
+                            metadata={**base_meta},
+                        )
+                    )
                     global_index += 1
 
         return chunks

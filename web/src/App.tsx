@@ -4,8 +4,11 @@ import BrowsePage from './pages/Browse'
 import IngestPage from './pages/Ingest'
 import StatsPage from './pages/Stats'
 import GraphPage from './pages/Graph'
+import ChatPage from './pages/Chat'
+import { NetworkBanner } from './components/NetworkBanner'
 
 const navItems = [
+  { to: '/chat', label: 'Chat' },
   { to: '/search', label: 'Search' },
   { to: '/browse', label: 'Browse' },
   { to: '/graph', label: 'Graph' },
@@ -16,6 +19,7 @@ const navItems = [
 export default function App() {
   return (
     <div className="min-h-screen flex flex-col">
+      <NetworkBanner />
       <header className="sticky top-0 z-10 bg-bg border-b border-border">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-lg font-semibold text-text">Memory Vault</h1>
@@ -41,7 +45,8 @@ export default function App() {
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6">
         <Routes>
-          <Route path="/" element={<Navigate to="/search" replace />} />
+          <Route path="/" element={<Navigate to="/chat" replace />} />
+          <Route path="/chat" element={<ChatPage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/browse" element={<BrowsePage />} />
           <Route path="/graph" element={<GraphPage />} />

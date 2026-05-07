@@ -10,6 +10,20 @@ from src.models.db import execute_query, fetch_all, fetch_one
 
 router = APIRouter(prefix="/api", tags=["spaces"], dependencies=[Depends(require_token)])
 
+# Names reserved for internal/future use. `default` is also reserved at the
+# database level (seeded migration) and would 409 on conflict, but listing it
+# here gives a clearer error before we hit the DB.
+RESERVED_SPACE_NAMES: frozenset[str] = frozenset(
+    {
+        "default",
+        "system",
+        "admin",
+        "all",
+        "none",
+        "_internal",
+    }
+)
+
 
 @router.get("/spaces", response_model=SpaceList)
 async def list_spaces() -> SpaceList:
@@ -38,9 +52,13 @@ async def list_spaces() -> SpaceList:
 
 @router.post("/spaces", response_model=SpaceInfo, status_code=status.HTTP_201_CREATED)
 async def create_space(req: SpaceCreateRequest) -> SpaceInfo:
-    existing = await fetch_one(
-        "SELECT 1 FROM memory_spaces WHERE name = %s", (req.name,)
-    )
+    if req.name in RESERVED_SPACE_NAMES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Space name is reserved: {req.name}",
+        )
+
+    existing = await fetch_one("SELECT 1 FROM memory_spaces WHERE name = %s", (req.name,))
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -21,12 +21,12 @@ async def search(req: SearchRequest) -> SearchResponse:
     since_dt: datetime | None = None
     if req.since:
         try:
-            since_dt = datetime.fromisoformat(req.since).replace(tzinfo=timezone.utc)
-        except ValueError:
+            since_dt = datetime.fromisoformat(req.since).replace(tzinfo=UTC)
+        except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid date format: {req.since}. Use ISO format (YYYY-MM-DD).",
-            )
+            ) from e
 
     results, variations, elapsed_ms = await hybrid_search(
         query_text=req.query,

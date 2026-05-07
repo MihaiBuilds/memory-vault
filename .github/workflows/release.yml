@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+# Releases are not cancellable — once a tag is pushed, the build must complete.
+
+permissions:
+  contents: write    # create GitHub Release
+  packages: write    # push to ghcr.io
+
+jobs:
+  docker:
+    name: Build + push multi-arch image to ghcr.io
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU (for arm64 emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata (tags + labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/mihaibuilds/memory-vault
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+          # On a tag push the default branch flag is false, so re-enable :latest explicitly:
+          flavor: |
+            latest=true
+
+      - name: Build + push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: docker
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # full history so tag annotation message is available
+
+      - name: Read tag annotation as release body
+        id: tag_body
+        run: |
+          # Use the annotated tag's message as the release body. Falls back to a
+          # short auto-generated note when the tag is lightweight (no message).
+          BODY=$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}")
+          if [ -z "$BODY" ]; then
+            BODY="Memory Vault ${GITHUB_REF_NAME} — see CHANGELOG.md and README for details."
+          fi
+          {
+            echo "body<<__EOF__"
+            echo "$BODY"
+            echo "__EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Stage release artifacts
+        run: |
+          # Snapshot docker-compose.yml so users on a tagged version can grab the
+          # exact compose file that was current at release time, even after :latest
+          # drifts upstream.
+          mkdir -p _release_artifacts
+          cp docker-compose.yml "_release_artifacts/docker-compose-${GITHUB_REF_NAME}.yml"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: ${{ steps.tag_body.outputs.body }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            _release_artifacts/docker-compose-${{ github.ref_name }}.yml

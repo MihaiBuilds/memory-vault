@@ -21,7 +21,7 @@ from src.extraction import (
     extract_relationships,
     write_graph_for_chunk,
 )
-from src.models.db import execute_query, fetch_one, get_pool
+from src.models.db import execute_query, fetch_one
 from src.services.embedding import embed_batch
 
 logger = logging.getLogger(__name__)
@@ -99,7 +99,7 @@ class IngestionPipeline:
         while self._running:
             try:
                 job = await asyncio.wait_for(self._queue.get(), timeout=1.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             except asyncio.CancelledError:
                 break
@@ -139,7 +139,7 @@ class IngestionPipeline:
         embeddings = embed_batch(texts)
 
         # Insert each chunk
-        for chunk, emb in zip(raw_chunks, embeddings):
+        for chunk, emb in zip(raw_chunks, embeddings, strict=True):
             await self._insert_chunk(chunk, emb, space_id)
 
     async def _insert_chunk(
@@ -183,9 +183,7 @@ async def ingest_text(
     from src.services.embedding import embed
 
     # Resolve space name to ID
-    row = await fetch_one(
-        "SELECT id FROM memory_spaces WHERE name = %s", (space,)
-    )
+    row = await fetch_one("SELECT id FROM memory_spaces WHERE name = %s", (space,))
     if not row:
         raise ValueError(f"Unknown space: {space}")
 
@@ -212,9 +210,7 @@ async def _run_extraction(chunk_id: str, text: str, space_id: int) -> None:
     """
     try:
         entities = await asyncio.to_thread(extract_entities, text)
-        relationships = await asyncio.to_thread(
-            extract_relationships, entities, text
-        )
+        relationships = await asyncio.to_thread(extract_relationships, entities, text)
     except Exception:
         logger.exception(
             "Extraction failed for chunk %s — graph data absent, chunk retained",

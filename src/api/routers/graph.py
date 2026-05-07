@@ -49,6 +49,9 @@ async def list_entities(
 
     where_sql = " AND ".join(where) if where else "TRUE"
 
+    # nosec B608 — `where_sql` is composed from a closed list of literal
+    # templates ("ms.name = %s", "e.type = %s"). User values go through %s
+    # parameters in `params`. No user-controlled SQL fragments.
     # Subquery builds entity + mention_count, then filters by min_mentions.
     base_sql = f"""
         SELECT e.id, e.name, e.type, ms.name AS space_name, e.created_at,
@@ -59,9 +62,9 @@ async def list_entities(
         WHERE {where_sql}
         GROUP BY e.id, ms.name
         HAVING COUNT(em.id) >= %s
-    """
+    """  # nosec B608
 
-    count_sql = f"SELECT COUNT(*) AS total FROM ({base_sql}) sub"
+    count_sql = f"SELECT COUNT(*) AS total FROM ({base_sql}) sub"  # nosec B608
     rows_sql = base_sql + " ORDER BY mention_count DESC, e.name ASC LIMIT %s OFFSET %s"
 
     count_row = await fetch_one(count_sql, tuple(params + [min_mentions]))
@@ -190,8 +193,10 @@ async def list_relationships(
 
     where_sql = " AND ".join(where) if where else "TRUE"
 
+    # nosec B608 — `where_sql` is composed from a closed set of literal
+    # templates; user values are bound via %s parameters.
     count_row = await fetch_one(
-        f"SELECT COUNT(*) AS total FROM relationships r WHERE {where_sql}",
+        f"SELECT COUNT(*) AS total FROM relationships r WHERE {where_sql}",  # nosec B608
         tuple(params),
     )
     total = int(count_row["total"]) if count_row else 0
@@ -205,7 +210,7 @@ async def list_relationships(
             JOIN entities t ON t.id = r.target_entity_id
             WHERE {where_sql}
             ORDER BY r.created_at DESC
-            LIMIT %s OFFSET %s""",
+            LIMIT %s OFFSET %s""",  # nosec B608
         tuple(params + [limit, offset]),
     )
 
@@ -223,9 +228,7 @@ async def list_relationships(
         for r in rows
     ]
 
-    return RelationshipList(
-        relationships=relationships, total=total, limit=limit, offset=offset
-    )
+    return RelationshipList(relationships=relationships, total=total, limit=limit, offset=offset)
 
 
 # ---------------------------------------------------------------------------
@@ -252,6 +255,8 @@ async def visualize(
 
     where_sql = " AND ".join(where) if where else "TRUE"
 
+    # nosec B608 — `where_sql` composed from closed-set literal templates;
+    # user values bound via %s parameters.
     # Nodes: pick top `max_nodes` by mention_count, filtered by min_mentions.
     node_rows = await fetch_all(
         f"""SELECT e.id, e.name, e.type, COUNT(em.id) AS mention_count
@@ -262,7 +267,7 @@ async def visualize(
             GROUP BY e.id
             HAVING COUNT(em.id) >= %s
             ORDER BY mention_count DESC, e.name ASC
-            LIMIT %s""",
+            LIMIT %s""",  # nosec B608
         tuple(params + [min_mentions, max_nodes]),
     )
 
@@ -277,7 +282,7 @@ async def visualize(
                 WHERE {where_sql}
                 GROUP BY e.id
                 HAVING COUNT(em.id) >= %s
-            ) sub""",
+            ) sub""",  # nosec B608
         tuple(params + [min_mentions]),
     )
     total_nodes_available = int(total_row["total"]) if total_row else 0

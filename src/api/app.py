@@ -10,17 +10,21 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
-
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
+import psycopg
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+
 from src.api.deps import RateLimitMiddleware
-from src.api.routers import chunks, graph, health, ingest, search, spaces
+from src.api.middleware import RequestIDMiddleware
+from src.api.routers import chat, chunks, graph, health, ingest, search, spaces
+from src.logging_config import configure_logging
 from src.models.db import close_pool, init_pool
 
+configure_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -59,6 +63,30 @@ def create_app() -> FastAPI:
 
     rate_limit = int(os.getenv("API_RATE_LIMIT_PER_MIN", "120"))
     app.add_middleware(RateLimitMiddleware, requests_per_minute=rate_limit)
+    app.add_middleware(RequestIDMiddleware)
+
+    @app.exception_handler(psycopg.OperationalError)
+    async def _db_unavailable(_request: Request, exc: psycopg.OperationalError):
+        logger.warning("Database unavailable: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": ("Database temporarily unavailable. Please retry shortly."),
+            },
+            headers={"Retry-After": "5"},
+        )
+
+    @app.exception_handler(Exception)
+    async def _unhandled(_request: Request, exc: Exception):
+        # Let FastAPI handle HTTPException / RequestValidationError naturally —
+        # this is the catch-all that prevents stack traces leaking on 500s.
+        if isinstance(exc, HTTPException):
+            raise exc
+        logger.exception("Unhandled error in request")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error. Check server logs."},
+        )
 
     app.include_router(health.router)
     app.include_router(search.router)
@@ -66,6 +94,7 @@ def create_app() -> FastAPI:
     app.include_router(spaces.router)
     app.include_router(ingest.router)
     app.include_router(graph.router)
+    app.include_router(chat.router)
 
     static_dir = Path(__file__).parent / "static"
     index_file = static_dir / "index.html"

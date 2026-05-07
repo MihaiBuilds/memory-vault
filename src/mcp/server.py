@@ -21,10 +21,9 @@ import decimal
 import hashlib
 import json
 import logging
-import os
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -37,11 +36,17 @@ _project_root = str(Path(__file__).parents[2])
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP  # noqa: E402
 
-from src.models.db import init_pool, fetch_one, fetch_all, execute_query, health_check
-from src.services.embedding import embed, embed_batch, MODEL_NAME
-from src.services.search import hybrid_search, resolve_space_names, expand_query
+from src.models.db import (  # noqa: E402
+    execute_query,
+    fetch_all,
+    fetch_one,
+    health_check,
+    init_pool,
+)
+from src.services.embedding import MODEL_NAME, embed  # noqa: E402
+from src.services.search import hybrid_search, resolve_space_names  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,6 +58,7 @@ logger = logging.getLogger("mcp.memory-vault")
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _json_default(obj):
     """Handle Decimal and datetime in JSON serialization."""
@@ -135,6 +141,7 @@ async def _ensure_db() -> bool:
 # Tool: recall
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool()
 async def recall(
     query: str,
@@ -159,11 +166,13 @@ async def recall(
         max_tokens: Token budget for results (default 2000).
     """
     if not await _ensure_db():
-        return _dumps({
-            "status": "offline",
-            "results": [],
-            "message": "Database is not available.",
-        })
+        return _dumps(
+            {
+                "status": "offline",
+                "results": [],
+                "message": "Database is not available.",
+            }
+        )
 
     try:
         space_ids = await resolve_space_names(spaces) if spaces else None
@@ -171,9 +180,11 @@ async def recall(
         since_dt = None
         if since:
             try:
-                since_dt = datetime.fromisoformat(since).replace(tzinfo=timezone.utc)
+                since_dt = datetime.fromisoformat(since).replace(tzinfo=UTC)
             except ValueError:
-                return _dumps({"error": f"Invalid date format: {since}. Use ISO format (YYYY-MM-DD)."})
+                return _dumps(
+                    {"error": f"Invalid date format: {since}. Use ISO format (YYYY-MM-DD)."}
+                )
 
         limit = min(max(limit, 1), 50)
         max_tokens = min(max(max_tokens, 200), 8000)
@@ -227,6 +238,7 @@ async def recall(
 # Tool: remember
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool()
 async def remember(
     text: str,
@@ -250,13 +262,13 @@ async def remember(
         return _dumps({"stored": False, "error": "Database offline"})
 
     try:
-        space_row = await fetch_one(
-            "SELECT id FROM memory_spaces WHERE name = %s", (space,)
-        )
+        space_row = await fetch_one("SELECT id FROM memory_spaces WHERE name = %s", (space,))
         if not space_row:
             available = await fetch_all("SELECT name FROM memory_spaces ORDER BY name")
             names = [r["name"] for r in available]
-            return _dumps({"stored": False, "error": f"Unknown space '{space}'. Available: {names}"})
+            return _dumps(
+                {"stored": False, "error": f"Unknown space '{space}'. Available: {names}"}
+            )
 
         space_id = space_row["id"]
 
@@ -272,12 +284,14 @@ async def remember(
             (space_id, content_hash),
         )
         if dup:
-            return _dumps({
-                "stored": False,
-                "duplicate": True,
-                "existing_chunk_id": str(dup["id"]),
-                "message": "This memory already exists (exact duplicate).",
-            })
+            return _dumps(
+                {
+                    "stored": False,
+                    "duplicate": True,
+                    "existing_chunk_id": str(dup["id"]),
+                    "message": "This memory already exists (exact duplicate).",
+                }
+            )
 
         # Classify
         category, importance = _classify_memory(text)
@@ -290,18 +304,19 @@ async def remember(
                    (id, space_id, chunk_index, speaker, content, embedding,
                     source, importance, metadata)
                VALUES (%s, %s, 0, %s, %s, %s::vector, %s, %s, %s::jsonb)""",
-            (chunk_id, space_id, speaker, text, str(embedding),
-             f"mcp:{source}", importance, meta),
+            (chunk_id, space_id, speaker, text, str(embedding), f"mcp:{source}", importance, meta),
         )
 
-        return _dumps({
-            "stored": True,
-            "chunk_id": chunk_id,
-            "space": space,
-            "category": category,
-            "importance": importance,
-            "message": "Memory stored successfully.",
-        })
+        return _dumps(
+            {
+                "stored": True,
+                "chunk_id": chunk_id,
+                "space": space,
+                "category": category,
+                "importance": importance,
+                "message": "Memory stored successfully.",
+            }
+        )
 
     except Exception as e:
         logger.exception("remember failed")
@@ -312,28 +327,65 @@ def _classify_memory(text: str) -> tuple[str, float]:
     """Classify a memory into a category and assign importance."""
     t = text.lower()
 
-    if any(w in t for w in (
-        "decided", "decision", "agreed", "chose", "will use",
-        "going with", "picked", "committed to", "locked",
-    )):
+    if any(
+        w in t
+        for w in (
+            "decided",
+            "decision",
+            "agreed",
+            "chose",
+            "will use",
+            "going with",
+            "picked",
+            "committed to",
+            "locked",
+        )
+    ):
         return "decision", 0.8
 
-    if any(w in t for w in (
-        "learned", "lesson", "mistake", "insight", "realized",
-        "discovered", "takeaway", "never again",
-    )):
+    if any(
+        w in t
+        for w in (
+            "learned",
+            "lesson",
+            "mistake",
+            "insight",
+            "realized",
+            "discovered",
+            "takeaway",
+            "never again",
+        )
+    ):
         return "lesson", 0.75
 
-    if any(w in t for w in (
-        "prefer", "always use", "convention", "never use",
-        "style", "rule", "must", "non-negotiable",
-    )):
+    if any(
+        w in t
+        for w in (
+            "prefer",
+            "always use",
+            "convention",
+            "never use",
+            "style",
+            "rule",
+            "must",
+            "non-negotiable",
+        )
+    ):
         return "preference", 0.7
 
-    if any(w in t for w in (
-        "pattern", "approach", "technique", "architecture",
-        "strategy", "workflow", "pipeline", "design",
-    )):
+    if any(
+        w in t
+        for w in (
+            "pattern",
+            "approach",
+            "technique",
+            "architecture",
+            "strategy",
+            "workflow",
+            "pipeline",
+            "design",
+        )
+    ):
         return "pattern", 0.7
 
     return "fact", 0.5
@@ -342,6 +394,7 @@ def _classify_memory(text: str) -> tuple[str, float]:
 # ---------------------------------------------------------------------------
 # Tool: forget
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool()
 async def forget(chunk_id: str) -> str:
@@ -373,7 +426,7 @@ async def forget(chunk_id: str) -> str:
             return _dumps({"success": False, "error": f"Chunk {chunk_id} is already forgotten."})
 
         meta["forgotten"] = True
-        meta["forgotten_at"] = datetime.now(timezone.utc).isoformat()
+        meta["forgotten_at"] = datetime.now(UTC).isoformat()
 
         await execute_query(
             """UPDATE chunks
@@ -385,11 +438,13 @@ async def forget(chunk_id: str) -> str:
         )
 
         preview = row["content"][:80] + "..." if len(row["content"]) > 80 else row["content"]
-        return _dumps({
-            "success": True,
-            "chunk_id": chunk_id,
-            "message": f'Memory forgotten: "{preview}"',
-        })
+        return _dumps(
+            {
+                "success": True,
+                "chunk_id": chunk_id,
+                "message": f'Memory forgotten: "{preview}"',
+            }
+        )
 
     except Exception as e:
         logger.exception("forget failed")
@@ -399,6 +454,7 @@ async def forget(chunk_id: str) -> str:
 # ---------------------------------------------------------------------------
 # Tool: memory_status
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool()
 async def memory_status() -> str:
@@ -442,16 +498,19 @@ async def memory_status() -> str:
             WHERE created_at >= now() - interval '24 hours'
         """)
 
-        return _dumps({
-            "status": "online" if db_ok else "degraded",
-            "database": "connected" if db_ok else "error",
-            "embedding_model": MODEL_NAME,
-            "total_chunks": total_chunks,
-            "active_chunks": active_chunks,
-            "chunks_per_space": spaces,
-            "queries_24h": ql["cnt"] if ql else 0,
-            "avg_latency_ms": round(float(ql["avg_lat"]), 1) if ql and ql["avg_lat"] else None,
-        }, indent=2)
+        return _dumps(
+            {
+                "status": "online" if db_ok else "degraded",
+                "database": "connected" if db_ok else "error",
+                "embedding_model": MODEL_NAME,
+                "total_chunks": total_chunks,
+                "active_chunks": active_chunks,
+                "chunks_per_space": spaces,
+                "queries_24h": ql["cnt"] if ql else 0,
+                "avg_latency_ms": round(float(ql["avg_lat"]), 1) if ql and ql["avg_lat"] else None,
+            },
+            indent=2,
+        )
 
     except Exception as e:
         logger.exception("memory_status failed")
@@ -461,6 +520,7 @@ async def memory_status() -> str:
 # ---------------------------------------------------------------------------
 # Resource: memory://spaces
 # ---------------------------------------------------------------------------
+
 
 @mcp.resource("memory://spaces")
 async def list_spaces() -> str:
@@ -480,19 +540,23 @@ async def list_spaces() -> str:
         ORDER BY ms.name
     """)
 
-    return _dumps([
-        {
-            "name": r["name"],
-            "description": r["description"],
-            "chunk_count": r["chunk_count"],
-        }
-        for r in rows
-    ], indent=2)
+    return _dumps(
+        [
+            {
+                "name": r["name"],
+                "description": r["description"],
+                "chunk_count": r["chunk_count"],
+            }
+            for r in rows
+        ],
+        indent=2,
+    )
 
 
 # ---------------------------------------------------------------------------
 # Resource: memory://stats
 # ---------------------------------------------------------------------------
+
 
 @mcp.resource("memory://stats")
 async def memory_stats() -> str:
@@ -518,18 +582,22 @@ async def memory_stats() -> str:
         WHERE created_at >= now() - interval '24 hours'
     """)
 
-    return _dumps({
-        "chunks_per_space": {r["name"]: r["active"] for r in rows},
-        "total_active_chunks": sum(r["active"] for r in rows),
-        "queries_24h": ql["cnt"] if ql else 0,
-        "avg_latency_ms": round(float(ql["avg_lat"]), 1) if ql and ql["avg_lat"] else None,
-        "zero_result_queries_24h": ql["zero_results"] if ql else 0,
-    }, indent=2)
+    return _dumps(
+        {
+            "chunks_per_space": {r["name"]: r["active"] for r in rows},
+            "total_active_chunks": sum(r["active"] for r in rows),
+            "queries_24h": ql["cnt"] if ql else 0,
+            "avg_latency_ms": round(float(ql["avg_lat"]), 1) if ql and ql["avg_lat"] else None,
+            "zero_result_queries_24h": ql["zero_results"] if ql else 0,
+        },
+        indent=2,
+    )
 
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def main():
     mcp.run()

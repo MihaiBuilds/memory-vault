@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions, setup help, or discussion
+    url: https://github.com/MihaiBuilds/memory-vault/discussions
+    about: For "how do I…", design questions, or general discussion — please use Discussions instead of Issues.
+  - name: Security vulnerabilities
+    url: https://github.com/MihaiBuilds/memory-vault/blob/main/SECURITY.md
+    about: Do not open a public issue for security reports. See SECURITY.md for the private disclosure process.

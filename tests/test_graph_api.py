@@ -13,7 +13,6 @@ import pytest
 
 from src.models.db import execute_query, fetch_one
 
-
 pytestmark = pytest.mark.asyncio
 
 
@@ -235,9 +234,7 @@ class TestListRelationships:
         await _seed_relationship(bob, carol, chunk_id)  # Bob is source
         await _seed_relationship(carol, alice, chunk_id)  # Alice is target
 
-        r = await client.get(
-            f"/api/graph/relationships?entity_id={alice}", headers=auth_headers
-        )
+        r = await client.get(f"/api/graph/relationships?entity_id={alice}", headers=auth_headers)
         body = r.json()
         assert body["total"] == 2  # Alice↔Bob and Carol↔Alice
 
@@ -249,9 +246,7 @@ class TestListRelationships:
         await _seed_relationship(alice, bob, chunk_id, rel_type="related_to")
         await _seed_relationship(alice, bob, chunk_id, rel_type="works_on")
 
-        r = await client.get(
-            "/api/graph/relationships?type=works_on", headers=auth_headers
-        )
+        r = await client.get("/api/graph/relationships?type=works_on", headers=auth_headers)
         body = r.json()
         assert body["total"] == 1
         assert body["relationships"][0]["type"] == "works_on"
@@ -284,18 +279,14 @@ class TestVisualize:
             ids.append(e)
 
         # max_nodes = 3 should truncate.
-        r = await client.get(
-            "/api/graph/visualize?max_nodes=3", headers=auth_headers
-        )
+        r = await client.get("/api/graph/visualize?max_nodes=3", headers=auth_headers)
         body = r.json()
         assert body["node_count"] == 3
         assert body["truncated"] is True
 
     async def test_max_nodes_cap_enforced(self, client, auth_headers):
         # FastAPI Query constraint is le=500; 501 must 422.
-        r = await client.get(
-            "/api/graph/visualize?max_nodes=501", headers=auth_headers
-        )
+        r = await client.get("/api/graph/visualize?max_nodes=501", headers=auth_headers)
         assert r.status_code == 422
 
     async def test_edges_only_between_surviving_nodes(self, client, auth_headers):
@@ -314,9 +305,7 @@ class TestVisualize:
         await _seed_relationship(popular, rare, chunk_id)
         await _seed_relationship(popular, also_popular, chunk_id)
 
-        r = await client.get(
-            "/api/graph/visualize?max_nodes=2", headers=auth_headers
-        )
+        r = await client.get("/api/graph/visualize?max_nodes=2", headers=auth_headers)
         body = r.json()
         surviving_ids = {n["id"] for n in body["nodes"]}
         # Rare's edge must have been pruned.
@@ -392,7 +381,9 @@ class TestExtractionOnIngest:
             headers=auth_headers,
             json={"text": "Alice met Bob yesterday.", "space": "default"},
         )
-        assert r.status_code == 200, f"Ingest should succeed despite extraction failure, got: {r.text}"
+        assert r.status_code == 200, (
+            f"Ingest should succeed despite extraction failure, got: {r.text}"
+        )
         body = r.json()
         assert body["stored"] is True
         chunk_id = body["chunk_id"]

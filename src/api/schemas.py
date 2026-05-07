@@ -7,7 +7,6 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 # ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------
@@ -26,7 +25,15 @@ class HealthResponse(BaseModel):
 
 
 class SearchRequest(BaseModel):
-    query: str = Field(..., min_length=1, examples=["how does hybrid search work"])
+    # 8 KB cap: protects the embedding model from oversized inputs without
+    # constraining real-world questions (largest natural query observed in
+    # internal use is ~500 chars).
+    query: str = Field(
+        ...,
+        min_length=1,
+        max_length=8_000,
+        examples=["how does hybrid search work"],
+    )
     spaces: list[str] | None = Field(default=None, examples=[["default"]])
     since: str | None = Field(default=None, examples=["2026-01-01"])
     limit: int = Field(default=10, ge=1, le=50)
@@ -112,7 +119,7 @@ class SpaceCreateRequest(BaseModel):
 
 
 class IngestTextRequest(BaseModel):
-    text: str = Field(..., min_length=1)
+    text: str = Field(..., min_length=1, max_length=1_000_000)
     space: str = Field(default="default")
     source: str = Field(default="api")
     speaker: str | None = None
@@ -209,3 +216,47 @@ class GraphVisualization(BaseModel):
     node_count: int
     edge_count: int
     truncated: bool
+
+
+# ---------------------------------------------------------------------------
+# Chat (RAG over memory + local LLM)
+# ---------------------------------------------------------------------------
+
+
+class ChatMessage(BaseModel):
+    role: str = Field(..., pattern=r"^(user|assistant)$")
+    # 32 KB cap per turn — generous for real conversations, blocks pathological
+    # input that would otherwise eat the LLM context budget before retrieval.
+    content: str = Field(..., min_length=1, max_length=32_000)
+
+
+class ChatRequest(BaseModel):
+    # Same 8 KB question cap as /api/search — chat re-runs hybrid search
+    # against this string before calling the LLM.
+    question: str = Field(..., min_length=1, max_length=8_000)
+    history: list[ChatMessage] = Field(default_factory=list)
+    spaces: list[str] | None = None
+    limit: int = Field(default=10, ge=1, le=20)
+    llm_url: str = Field(default="http://localhost:1234")
+    model: str | None = None
+    llm_api_key: str | None = None
+
+
+class ChatSource(BaseModel):
+    chunk_id: str
+    content: str
+    similarity: float
+    space: str
+    speaker: str | None = None
+    source: str | None = None
+    created_at: datetime | None = None
+
+
+class ChatResponse(BaseModel):
+    answer: str
+    sources: list[ChatSource]
+    model: str
+    query_time_ms: int
+    llm_time_ms: int
+    status: str = "ok"
+    message: str | None = None

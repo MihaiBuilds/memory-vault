@@ -8,6 +8,7 @@ Shared dependencies and middleware:
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
 import os
 import secrets
@@ -19,7 +20,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
-from src.models.db import execute_query, fetch_one
+from src.models.db import execute_query, fetch_all
 
 logger = logging.getLogger(__name__)
 
@@ -81,13 +82,23 @@ async def require_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    token_hash = hash_token(credentials.credentials)
-    row = await fetch_one(
-        """SELECT id FROM api_tokens
-           WHERE token_hash = %s AND revoked_at IS NULL""",
-        (token_hash,),
+    presented_hash = hash_token(credentials.credentials)
+    rows = await fetch_all(
+        """SELECT id, token_hash FROM api_tokens
+           WHERE revoked_at IS NULL""",
     )
-    if not row:
+
+    # Constant-time scan over all active tokens. SHA-256 of a 32-byte token
+    # gives effectively-random hashes, so a non-constant-time SQL `=` lookup
+    # would already be hard to time-attack — but compare_digest makes the
+    # property explicit and satisfies the v1.0 security review verbatim.
+    matched_id = None
+    for row in rows:
+        if hmac.compare_digest(presented_hash, row["token_hash"]):
+            matched_id = row["id"]
+            break
+
+    if matched_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or revoked token",
@@ -96,7 +107,7 @@ async def require_token(
 
     await execute_query(
         "UPDATE api_tokens SET last_used_at = now() WHERE id = %s",
-        (row["id"],),
+        (matched_id,),
     )
 
 

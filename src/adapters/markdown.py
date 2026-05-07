@@ -16,7 +16,6 @@ _HR_RE = re.compile(r"^\s*(?:---+|\*\*\*+|___+)\s*$", re.MULTILINE)
 
 
 class MarkdownAdapter(SourceAdapter):
-
     def __init__(self, default_speaker: str = "human") -> None:
         self._speaker = default_speaker
 
@@ -52,13 +51,15 @@ class MarkdownAdapter(SourceAdapter):
 
                 parts = _split_long_text(sub, max_words=500)
                 for part_text in parts:
-                    chunks.append(RawChunk(
-                        text=part_text,
-                        speaker=self._speaker,
-                        timestamp=ts,
-                        chunk_index=chunk_index,
-                        metadata={**base_meta, "source_msg_index": chunk_index},
-                    ))
+                    chunks.append(
+                        RawChunk(
+                            text=part_text,
+                            speaker=self._speaker,
+                            timestamp=ts,
+                            chunk_index=chunk_index,
+                            metadata={**base_meta, "source_msg_index": chunk_index},
+                        )
+                    )
                     chunk_index += 1
 
         return chunks

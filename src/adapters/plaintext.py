@@ -15,7 +15,6 @@ _HR_RE = re.compile(r"\n\s*---+\s*\n")
 
 
 class PlainTextAdapter(SourceAdapter):
-
     def __init__(self, default_speaker: str = "human") -> None:
         self._speaker = default_speaker
 
@@ -41,17 +40,19 @@ class PlainTextAdapter(SourceAdapter):
             for block in merged:
                 parts = _split_long_text(block, max_words=500)
                 for part in parts:
-                    chunks.append(RawChunk(
-                        text=part,
-                        speaker=self._speaker,
-                        timestamp=None,
-                        chunk_index=chunk_index,
-                        metadata={
-                            "source_file": source_path,
-                            "source": "plaintext",
-                            "source_msg_index": chunk_index,
-                        },
-                    ))
+                    chunks.append(
+                        RawChunk(
+                            text=part,
+                            speaker=self._speaker,
+                            timestamp=None,
+                            chunk_index=chunk_index,
+                            metadata={
+                                "source_file": source_path,
+                                "source": "plaintext",
+                                "source_msg_index": chunk_index,
+                            },
+                        )
+                    )
                     chunk_index += 1
 
         return chunks

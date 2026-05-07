@@ -18,7 +18,7 @@ class RawChunk:
     """A single chunk of text extracted from a source."""
 
     text: str
-    speaker: str              # 'human', 'assistant', 'unknown'
+    speaker: str  # 'human', 'assistant', 'unknown'
     timestamp: datetime | None
     chunk_index: int
     metadata: dict = field(default_factory=dict)
@@ -109,9 +109,9 @@ def _split_by_sentences(text: str, max_words: int) -> list[str]:
 
 def detect_adapter(file_path: str, content: str = "") -> SourceAdapter:
     """Auto-detect the right adapter for a file."""
+    from src.adapters.claude import ClaudeJsonAdapter
     from src.adapters.markdown import MarkdownAdapter
     from src.adapters.plaintext import PlainTextAdapter
-    from src.adapters.claude import ClaudeJsonAdapter
 
     path_lower = file_path.lower()
 
@@ -121,6 +121,7 @@ def detect_adapter(file_path: str, content: str = "") -> SourceAdapter:
         if stripped.startswith("[") or stripped.startswith("{"):
             try:
                 import json
+
                 data = json.loads(stripped)
                 # Claude export has chat_messages
                 test = data if isinstance(data, list) else [data]
