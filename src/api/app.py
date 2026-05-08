@@ -110,12 +110,33 @@ def create_app() -> FastAPI:
             """Serve the React bundle for any non-API path (SPA deep-link support)."""
             if full_path.startswith(("api/", "docs", "redoc", "openapi.json")):
                 raise HTTPException(status_code=404)
-            candidate = static_dir / full_path
-            if full_path and candidate.is_file():
-                return FileResponse(candidate)
-            return FileResponse(index_file)
+            # Security-critical: do not bypass _safe_static_path. It blocks
+            # path-traversal (`../../etc/passwd`) on this unauthenticated route.
+            candidate = _safe_static_path(static_dir, full_path)
+            if not full_path or candidate is None or not candidate.is_file():
+                return FileResponse(index_file)
+            return FileResponse(candidate)
 
     return app
+
+
+def _safe_static_path(static_root: Path, full_path: str) -> Path | None:
+    """
+    Resolve `full_path` against `static_root` and return the resolved path
+    only if it stays within `static_root`. Returns None on traversal
+    attempts (e.g. '../../etc/passwd') so the caller can fall back to
+    serving the SPA shell.
+
+    Security-critical: this is the only guard between the unauthenticated
+    SPA fallback route and arbitrary file reads on the host filesystem.
+    Do not bypass.
+    """
+    try:
+        candidate = (static_root / full_path).resolve()
+        candidate.relative_to(static_root.resolve())
+    except (ValueError, OSError):
+        return None
+    return candidate
 
 
 def _parse_cors_origins(value: str) -> list[str]:

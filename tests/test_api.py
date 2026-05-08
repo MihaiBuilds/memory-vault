@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.api.app import _parse_cors_origins
+from src.api.app import _parse_cors_origins, _safe_static_path
 from src.api.deps import generate_token, hash_token
 from src.api.schemas import (
     IngestTextRequest,
@@ -80,6 +80,37 @@ class TestSchemas:
     def test_space_info_roundtrip(self):
         info = SpaceInfo(name="default", description="d", chunk_count=5)
         assert info.chunk_count == 5
+
+
+class TestSafeStaticPath:
+    """Path-traversal guard for the unauthenticated SPA fallback route."""
+
+    def test_normal_path_stays_inside_static(self, tmp_path):
+        result = _safe_static_path(tmp_path, "assets/index.css")
+        assert result is not None
+        assert result.is_relative_to(tmp_path.resolve())
+
+    def test_dot_dot_traversal_returns_none(self, tmp_path):
+        assert _safe_static_path(tmp_path, "../../etc/passwd") is None
+
+    def test_absolute_path_returns_none(self, tmp_path):
+        assert _safe_static_path(tmp_path, "/etc/passwd") is None
+
+    def test_empty_string_resolves_to_static_root(self, tmp_path):
+        result = _safe_static_path(tmp_path, "")
+        assert result == tmp_path.resolve()
+
+
+class TestSpaFallbackTraversalE2E:
+    """End-to-end tripwire: a traversal request must never leak file contents."""
+
+    @pytest.mark.asyncio
+    async def test_traversal_request_does_not_leak_etc_passwd(self, client):
+        resp = await client.get("/../../../../etc/passwd")
+        # Whether the route exists (returns 200/index.html) or not (404),
+        # what matters is that /etc/passwd contents are NEVER in the body.
+        assert "root:" not in resp.text
+        assert "/bin/bash" not in resp.text
 
 
 class TestRateLimitWindow:
