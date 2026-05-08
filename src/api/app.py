@@ -132,8 +132,15 @@ def _safe_static_path(static_root: Path, full_path: str) -> Path | None:
     Do not bypass.
     """
     try:
-        candidate = (static_root / full_path).resolve()
-        candidate.relative_to(static_root.resolve())
+        requested = Path(full_path)
+        # Reject absolute/anchored paths and explicit traversal segments
+        # before composing with the trusted static root.
+        if requested.is_absolute() or requested.anchor or ".." in requested.parts:
+            return None
+
+        root_resolved = static_root.resolve()
+        candidate = (root_resolved / requested).resolve()
+        candidate.relative_to(root_resolved)
     except (ValueError, OSError):
         return None
     return candidate
