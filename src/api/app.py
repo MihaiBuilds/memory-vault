@@ -130,20 +130,30 @@ def _safe_static_path(static_root: Path, full_path: str) -> Path | None:
     Security-critical: this is the only guard between the unauthenticated
     SPA fallback route and arbitrary file reads on the host filesystem.
     Do not bypass.
-    """
-    try:
-        requested = Path(full_path)
-        # Reject absolute/anchored paths and explicit traversal segments
-        # before composing with the trusted static root.
-        if requested.is_absolute() or requested.anchor or ".." in requested.parts:
-            return None
 
-        root_resolved = static_root.resolve()
-        candidate = (root_resolved / requested).resolve()
-        candidate.relative_to(root_resolved)
+    Defense in depth — three layers, each sufficient on its own:
+      1. Reject empty / null-byte / leading-slash inputs.
+      2. Reject explicit traversal segments before path composition.
+      3. After resolution, enforce that the candidate stays inside the
+         trusted root via os.path.commonpath (the sanitizer pattern
+         recognized by CodeQL's py/path-injection query).
+    """
+    if not full_path or "\x00" in full_path:
+        return None
+    # Strip leading slashes/backslashes so absolute user input cannot
+    # override the trusted root on any platform.
+    normalized = full_path.lstrip("/\\")
+    requested = Path(normalized)
+    if any(part in {"", ".", ".."} for part in requested.parts):
+        return None
+    try:
+        root_real = os.path.realpath(static_root)
+        candidate_real = os.path.realpath(os.path.join(root_real, normalized))
     except (ValueError, OSError):
         return None
-    return candidate
+    if os.path.commonpath([root_real, candidate_real]) != root_real:
+        return None
+    return Path(candidate_real)
 
 
 def _parse_cors_origins(value: str) -> list[str]:
