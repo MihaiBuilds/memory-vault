@@ -6,9 +6,12 @@ Full integration tests live in docker compose and exercise the real stack.
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import pytest
 
-from src.api.app import _parse_cors_origins
+from src.api.app import _parse_cors_origins, _safe_static_path
 from src.api.deps import generate_token, hash_token
 from src.api.schemas import (
     IngestTextRequest,
@@ -80,6 +83,56 @@ class TestSchemas:
     def test_space_info_roundtrip(self):
         info = SpaceInfo(name="default", description="d", chunk_count=5)
         assert info.chunk_count == 5
+
+
+class TestSafeStaticPath:
+    """Path-traversal guard for the unauthenticated SPA fallback route."""
+
+    def test_normal_path_stays_inside_static(self, tmp_path):
+        result = _safe_static_path(tmp_path, "assets/index.css")
+        assert result is not None
+        assert result.is_relative_to(tmp_path.resolve())
+
+    def test_dot_dot_traversal_returns_none(self, tmp_path):
+        assert _safe_static_path(tmp_path, "../../etc/passwd") is None
+
+    def test_absolute_path_cannot_escape_static_root(self, tmp_path):
+        # Leading "/" is stripped, so input like "/etc/passwd" is treated as
+        # the relative path "etc/passwd" — harmlessly composed inside
+        # static_root (where it does not exist; the route's is_file() check
+        # then falls back to index.html). What matters: we NEVER return a
+        # path resolving to the system /etc/passwd.
+        result = _safe_static_path(tmp_path, "/etc/passwd")
+        if result is not None:
+            assert Path(result).is_relative_to(Path(os.path.realpath(tmp_path)))
+            assert str(result) != "/etc/passwd"
+
+    def test_empty_string_returns_none(self, tmp_path):
+        # Empty input is rejected at the sanitizer; the route falls back
+        # to serving index.html via its own `not full_path` short-circuit.
+        assert _safe_static_path(tmp_path, "") is None
+
+    def test_null_byte_returns_none(self, tmp_path):
+        assert _safe_static_path(tmp_path, "assets/\x00.css") is None
+
+    def test_leading_slash_stripped_then_resolved_safely(self, tmp_path):
+        # Leading "/" is stripped by lstrip("/\\") so it does not override
+        # the trusted root; the rest must still resolve inside static_root.
+        result = _safe_static_path(tmp_path, "/assets/index.css")
+        assert result is not None
+        assert Path(result).is_relative_to(Path(os.path.realpath(tmp_path)))
+
+
+class TestSpaFallbackTraversalE2E:
+    """End-to-end tripwire: a traversal request must never leak file contents."""
+
+    @pytest.mark.asyncio
+    async def test_traversal_request_does_not_leak_etc_passwd(self, client):
+        resp = await client.get("/../../../../etc/passwd")
+        # Whether the route exists (returns 200/index.html) or not (404),
+        # what matters is that /etc/passwd contents are NEVER in the body.
+        assert "root:" not in resp.text
+        assert "/bin/bash" not in resp.text
 
 
 class TestRateLimitWindow:
