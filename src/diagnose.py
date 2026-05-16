@@ -105,6 +105,7 @@ def _read_version() -> str:
                 # version = "0.4.0"
                 return line.split("=", 1)[1].strip().strip('"').strip("'")
     except OSError:
+        # pyproject.toml unreadable — return "unknown" rather than crash diagnostics.
         pass
     return "unknown"
 

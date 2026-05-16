@@ -128,6 +128,7 @@ def detect_adapter(file_path: str, content: str = "") -> SourceAdapter:
                 if test and "chat_messages" in test[0]:
                     return ClaudeJsonAdapter()
             except (json.JSONDecodeError, KeyError, IndexError):
+                # Not Claude JSON — fall through to PlainTextAdapter.
                 pass
         return PlainTextAdapter()
 

@@ -239,5 +239,6 @@ def _parse_sse(body: str) -> list[dict]:
                     try:
                         events.append(json.loads(payload))
                     except json.JSONDecodeError:
+                        # Skip malformed SSE payloads (e.g. partial frames).
                         pass
     return events
