@@ -217,6 +217,7 @@ async def _detect_model(
                 if models:
                     return models[0].get("id", "default")
     except Exception:
+        # Network/parse failure when probing /v1/models — fall back to "default".
         pass
     return "default"
 
