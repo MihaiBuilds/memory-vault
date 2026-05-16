@@ -4,7 +4,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1 — build the React dashboard
 # ---------------------------------------------------------------------------
-FROM node:20-slim AS web-builder
+FROM node:26-slim AS web-builder
 
 WORKDIR /web
 
