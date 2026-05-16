@@ -110,12 +110,50 @@ def create_app() -> FastAPI:
             """Serve the React bundle for any non-API path (SPA deep-link support)."""
             if full_path.startswith(("api/", "docs", "redoc", "openapi.json")):
                 raise HTTPException(status_code=404)
-            candidate = static_dir / full_path
-            if full_path and candidate.is_file():
-                return FileResponse(candidate)
-            return FileResponse(index_file)
+            # Security-critical: do not bypass _safe_static_path. It blocks
+            # path-traversal (`../../etc/passwd`) on this unauthenticated route.
+            candidate = _safe_static_path(static_dir, full_path)
+            if not full_path or candidate is None or not candidate.is_file():
+                return FileResponse(index_file)
+            return FileResponse(candidate)
 
     return app
+
+
+def _safe_static_path(static_root: Path, full_path: str) -> Path | None:
+    """
+    Resolve `full_path` against `static_root` and return the resolved path
+    only if it stays within `static_root`. Returns None on traversal
+    attempts (e.g. '../../etc/passwd') so the caller can fall back to
+    serving the SPA shell.
+
+    Security-critical: this is the only guard between the unauthenticated
+    SPA fallback route and arbitrary file reads on the host filesystem.
+    Do not bypass.
+
+    Defense in depth — three layers, each sufficient on its own:
+      1. Reject empty / null-byte / leading-slash inputs.
+      2. Reject explicit traversal segments before path composition.
+      3. After resolution, enforce that the candidate stays inside the
+         trusted root via os.path.commonpath (the sanitizer pattern
+         recognized by CodeQL's py/path-injection query).
+    """
+    if not full_path or "\x00" in full_path:
+        return None
+    # Strip leading slashes/backslashes so absolute user input cannot
+    # override the trusted root on any platform.
+    normalized = full_path.lstrip("/\\")
+    requested = Path(normalized)
+    if any(part in {"", ".", ".."} for part in requested.parts):
+        return None
+    try:
+        root_real = os.path.realpath(static_root)
+        candidate_real = os.path.realpath(os.path.join(root_real, normalized))
+    except (ValueError, OSError):
+        return None
+    if os.path.commonpath([root_real, candidate_real]) != root_real:
+        return None
+    return Path(candidate_real)
 
 
 def _parse_cors_origins(value: str) -> list[str]:
