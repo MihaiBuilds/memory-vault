@@ -20,7 +20,7 @@ services:
       retries: 10
 
   app:
-    build: .
+    image: ghcr.io/mihaibuilds/memory-vault:1.0.1
     depends_on:
       db:
         condition: service_healthy

@@ -217,6 +217,7 @@ async def _detect_model(
                 if models:
                     return models[0].get("id", "default")
     except Exception:
+        # Network/parse failure when probing /v1/models — fall back to "default".
         pass
     return "default"
 
@@ -602,8 +603,9 @@ async def chat_stream(req: ChatRequest):
                         ),
                     }
                 )
-            except Exception as e:
-                yield _sse({"type": "error", "message": f"LLM error: {e}"})
+            except Exception:
+                logger.exception("LLM call failed during stream")
+                yield _sse({"type": "error", "message": "LLM error. Check server logs."})
 
         except Exception:
             logger.exception("Chat stream failed")
