@@ -247,7 +247,7 @@ export default function ChatPage() {
                 value={llmUrl}
                 onChange={(e) => persistLlmUrl(e.target.value)}
                 placeholder={DEFAULT_LLM_URL}
-                className="flex-1 bg-bg border border-border rounded-md px-3 py-2 text-sm text-text outline-none focus:border-accent"
+                className="flex-1 bg-bg border border-border rounded-md px-3 py-2 text-sm text-text outline-hidden focus:border-accent"
               />
               <button
                 type="button"
@@ -305,7 +305,7 @@ export default function ChatPage() {
             onChange={(e) => setQuestion(e.target.value)}
             placeholder={streaming ? 'Generating…' : 'Ask anything from your vault…'}
             disabled={streaming}
-            className="flex-1 bg-bg border border-border rounded-md px-3 py-2 text-sm text-text outline-none focus:border-accent disabled:opacity-60"
+            className="flex-1 bg-bg border border-border rounded-md px-3 py-2 text-sm text-text outline-hidden focus:border-accent disabled:opacity-60"
           />
           {streaming ? (
             <button

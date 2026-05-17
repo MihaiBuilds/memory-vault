@@ -30,7 +30,7 @@ export default function TokenGate({ children }: { children: ReactNode }) {
         <h1 className="text-lg font-semibold text-text mb-2">Memory Vault</h1>
         <p className="text-sm text-text2 mb-5">
           Paste an API token to continue. Create one with{' '}
-          <code className="px-1.5 py-0.5 rounded bg-bg3 text-text text-xs">
+          <code className="px-1.5 py-0.5 rounded-sm bg-bg3 text-text text-xs">
             memory-vault token create dashboard
           </code>
           .
@@ -41,7 +41,7 @@ export default function TokenGate({ children }: { children: ReactNode }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="mv_..."
-          className="w-full bg-bg border border-border rounded-md px-3 py-2 text-sm text-text outline-none focus:border-accent"
+          className="w-full bg-bg border border-border rounded-md px-3 py-2 text-sm text-text outline-hidden focus:border-accent"
         />
         {error && <p className="text-xs text-danger mt-2">{error}</p>}
         <button

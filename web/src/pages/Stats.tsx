@@ -36,7 +36,7 @@ export default function StatsPage() {
           <h2 className="text-xs uppercase tracking-wider text-text2">Overview</h2>
           <button
             onClick={refreshAll}
-            className="px-3 py-1 rounded text-xs font-medium border border-border text-text2 hover:text-text hover:border-accent"
+            className="px-3 py-1 rounded-sm text-xs font-medium border border-border text-text2 hover:text-text hover:border-accent"
           >
             Refresh
           </button>
@@ -90,7 +90,7 @@ export default function StatsPage() {
                     {s.chunk_count.toLocaleString()} chunk{s.chunk_count === 1 ? '' : 's'}
                   </span>
                 </div>
-                <div className="h-1.5 rounded bg-bg overflow-hidden">
+                <div className="h-1.5 rounded-sm bg-bg overflow-hidden">
                   <div
                     className="h-full bg-accent"
                     style={{ width: `${(s.chunk_count / maxCount) * 100}%` }}
