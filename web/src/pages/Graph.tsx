@@ -127,7 +127,7 @@ function FilterBar({ spaces, space, type, minMentions, maxNodes, onChange }: Fil
         <select
           value={space}
           onChange={(e) => onChange({ space: e.target.value || null })}
-          className="bg-bg3 border border-border rounded px-2 py-1 text-sm text-text"
+          className="bg-bg3 border border-border rounded-sm px-2 py-1 text-sm text-text"
         >
           <option value="">All spaces</option>
           {spaces.map((s) => (
@@ -143,7 +143,7 @@ function FilterBar({ spaces, space, type, minMentions, maxNodes, onChange }: Fil
         <select
           value={type}
           onChange={(e) => onChange({ type: e.target.value || null })}
-          className="bg-bg3 border border-border rounded px-2 py-1 text-sm text-text"
+          className="bg-bg3 border border-border rounded-sm px-2 py-1 text-sm text-text"
         >
           <option value="">All types</option>
           {ENTITY_TYPES.map((t) => (
@@ -173,7 +173,7 @@ function FilterBar({ spaces, space, type, minMentions, maxNodes, onChange }: Fil
         <select
           value={maxNodes}
           onChange={(e) => onChange({ max_nodes: Number.parseInt(e.target.value, 10) })}
-          className="bg-bg3 border border-border rounded px-2 py-1 text-sm text-text"
+          className="bg-bg3 border border-border rounded-sm px-2 py-1 text-sm text-text"
         >
           {MAX_NODES_OPTIONS.map((n) => (
             <option key={n} value={n}>
@@ -248,7 +248,7 @@ function GraphBody({ query, selectedId, onSelect, onClosePanel, maxNodes }: Grap
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
         <div className="bg-bg2 border border-border rounded-md overflow-hidden relative">
           {query.isFetching && (
-            <div className="absolute top-2 right-2 text-xs text-text2 bg-bg2/80 px-2 py-1 rounded">
+            <div className="absolute top-2 right-2 text-xs text-text2 bg-bg2/80 px-2 py-1 rounded-sm">
               Updating…
             </div>
           )}
@@ -500,7 +500,7 @@ function SidePanel({ entityId, onClose }: SidePanelProps) {
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="text-xs uppercase tracking-wide text-text2">{entity.type}</div>
-          <h3 className="text-base font-semibold text-text break-words">{entity.name}</h3>
+          <h3 className="text-base font-semibold text-text wrap-break-word">{entity.name}</h3>
           <div className="text-xs text-text2 mt-1">
             space: {entity.space} · {entity.mention_count}{' '}
             {entity.mention_count === 1 ? 'mention' : 'mentions'}
@@ -524,7 +524,7 @@ function SidePanel({ entityId, onClose }: SidePanelProps) {
             {entity.mentions.slice(0, 20).map((m, i) => (
               <li
                 key={`${m.chunk_id}-${i}`}
-                className="text-xs text-text2 bg-bg3 border border-border rounded p-2"
+                className="text-xs text-text2 bg-bg3 border border-border rounded-sm p-2"
               >
                 {m.chunk_preview}
                 {m.chunk_preview.length >= 200 && '…'}
@@ -552,12 +552,12 @@ function SidePanel({ entityId, onClose }: SidePanelProps) {
               >
                 <span className="flex items-center gap-2 min-w-0">
                   <span
-                    className="inline-block w-2 h-2 rounded-full flex-shrink-0"
+                    className="inline-block w-2 h-2 rounded-full shrink-0"
                     style={{ backgroundColor: TYPE_COLORS[r.type] ?? DEFAULT_COLOR }}
                   />
                   <span className="truncate">{r.name}</span>
                 </span>
-                <span className="text-text2 flex-shrink-0">×{r.co_mention_count}</span>
+                <span className="text-text2 shrink-0">×{r.co_mention_count}</span>
               </li>
             ))}
           </ul>

@@ -41,7 +41,7 @@ export default function SearchPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Ask a question or paste a phrase…"
-            className="flex-1 min-w-[240px] bg-bg border border-border rounded-md px-3 py-2 text-sm text-text outline-none focus:border-accent"
+            className="flex-1 min-w-[240px] bg-bg border border-border rounded-md px-3 py-2 text-sm text-text outline-hidden focus:border-accent"
           />
           <select
             value={space}
@@ -95,7 +95,7 @@ export default function SearchPage() {
           </div>
 
           {data.query_variations.length > 1 && (
-            <div className="mb-3 p-2 rounded bg-bg text-xs text-text2">
+            <div className="mb-3 p-2 rounded-sm bg-bg text-xs text-text2">
               Query variations: {data.query_variations.slice(1).join(' · ')}
             </div>
           )}
@@ -116,7 +116,7 @@ export default function SearchPage() {
                     >
                       {(Math.max(0, hit.similarity) * 100).toFixed(1)}%
                     </span>
-                    <span className="px-1.5 py-0.5 rounded bg-bg3">
+                    <span className="px-1.5 py-0.5 rounded-sm bg-bg3">
                       {hit.space}
                     </span>
                     {hit.speaker && (
@@ -129,7 +129,7 @@ export default function SearchPage() {
                       <span>{new Date(hit.created_at).toLocaleDateString()}</span>
                     )}
                   </div>
-                  <div className="text-sm text-text whitespace-pre-wrap break-words">
+                  <div className="text-sm text-text whitespace-pre-wrap wrap-break-word">
                     {hit.content}
                   </div>
                 </li>

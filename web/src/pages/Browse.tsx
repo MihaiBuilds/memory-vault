@@ -129,7 +129,7 @@ export default function BrowsePage() {
                   className="rounded-md border border-border bg-bg p-3"
                 >
                   <div className="flex flex-wrap gap-3 text-xs text-text2 mb-1.5 items-center">
-                    <span className="px-1.5 py-0.5 rounded bg-bg3">{c.space}</span>
+                    <span className="px-1.5 py-0.5 rounded-sm bg-bg3">{c.space}</span>
                     <span>importance {c.importance.toFixed(2)}</span>
                     {c.speaker && (
                       <span className="text-purple font-semibold">{c.speaker}</span>
@@ -151,7 +151,7 @@ export default function BrowsePage() {
                       {isDeleting ? 'Deleting…' : isConfirming ? 'Confirm?' : 'Delete'}
                     </button>
                   </div>
-                  <div className="text-sm text-text whitespace-pre-wrap break-words">
+                  <div className="text-sm text-text whitespace-pre-wrap wrap-break-word">
                     {c.content}
                   </div>
                 </li>
@@ -165,7 +165,7 @@ export default function BrowsePage() {
             <button
               onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
               disabled={offset === 0}
-              className="px-3 py-1 rounded text-xs font-medium border border-border text-text2 hover:text-text hover:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-3 py-1 rounded-sm text-xs font-medium border border-border text-text2 hover:text-text hover:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
             >
               ← Prev
             </button>
@@ -175,7 +175,7 @@ export default function BrowsePage() {
             <button
               onClick={() => setOffset(offset + PAGE_SIZE)}
               disabled={offset + PAGE_SIZE >= total}
-              className="px-3 py-1 rounded text-xs font-medium border border-border text-text2 hover:text-text hover:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-3 py-1 rounded-sm text-xs font-medium border border-border text-text2 hover:text-text hover:border-accent disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next →
             </button>

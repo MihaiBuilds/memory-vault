@@ -176,7 +176,7 @@ function TextTab() {
         onChange={(e) => setText(e.target.value)}
         placeholder="Paste or type the memory to store…"
         rows={8}
-        className="w-full bg-bg border border-border rounded-md px-3 py-2 text-sm text-text outline-none focus:border-accent resize-y"
+        className="w-full bg-bg border border-border rounded-md px-3 py-2 text-sm text-text outline-hidden focus:border-accent resize-y"
       />
 
       <div className="flex flex-wrap gap-2">
@@ -186,14 +186,14 @@ function TextTab() {
           value={source}
           onChange={(e) => setSource(e.target.value)}
           placeholder="source"
-          className="bg-bg border border-border rounded-md px-3 py-2 text-sm text-text outline-none focus:border-accent"
+          className="bg-bg border border-border rounded-md px-3 py-2 text-sm text-text outline-hidden focus:border-accent"
         />
         <input
           type="text"
           value={speaker}
           onChange={(e) => setSpeaker(e.target.value)}
           placeholder="speaker (optional)"
-          className="bg-bg border border-border rounded-md px-3 py-2 text-sm text-text outline-none focus:border-accent"
+          className="bg-bg border border-border rounded-md px-3 py-2 text-sm text-text outline-hidden focus:border-accent"
         />
         <div className="flex-1" />
         <button
@@ -322,9 +322,9 @@ function FileTab() {
         />
         <p className="text-sm text-text2">
           Drop one or more{' '}
-          <code className="px-1.5 py-0.5 rounded bg-bg3 text-text text-xs">.md</code>,{' '}
-          <code className="px-1.5 py-0.5 rounded bg-bg3 text-text text-xs">.txt</code>, or{' '}
-          <code className="px-1.5 py-0.5 rounded bg-bg3 text-text text-xs">.json</code> files
+          <code className="px-1.5 py-0.5 rounded-sm bg-bg3 text-text text-xs">.md</code>,{' '}
+          <code className="px-1.5 py-0.5 rounded-sm bg-bg3 text-text text-xs">.txt</code>, or{' '}
+          <code className="px-1.5 py-0.5 rounded-sm bg-bg3 text-text text-xs">.json</code> files
           here, or click to browse.
         </p>
       </div>
@@ -369,7 +369,7 @@ function FileTab() {
           <button
             type="button"
             onClick={reset}
-            className="px-3 py-2 rounded text-sm font-medium border border-border text-text2 hover:text-text hover:border-accent"
+            className="px-3 py-2 rounded-sm text-sm font-medium border border-border text-text2 hover:text-text hover:border-accent"
           >
             Clear
           </button>
