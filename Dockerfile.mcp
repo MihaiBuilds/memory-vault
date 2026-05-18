@@ -1,0 +1,30 @@
+# Memory Vault — MCP-only image
+#
+# A thin variant of the main Memory Vault image that ships ONLY the MCP stdio
+# server. No FastAPI, no web dashboard, no API stack. The MCP server connects
+# to an external Postgres+pgvector via env vars (DB_HOST, DB_PORT, DB_NAME,
+# DB_USER, DB_PASSWORD).
+#
+# Intended for: Docker MCP Toolkit catalog + official MCP registry submissions.
+# Users bring their own Postgres (or run the standard docker-compose.yml).
+#
+# Built and pushed by .github/workflows/release.yml on every v*.*.* tag.
+
+FROM python:3.14-slim
+
+WORKDIR /app
+
+# CPU-only PyTorch (sentence-transformers needs torch for embeddings)
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
+COPY pyproject.toml ./
+COPY src/ ./src/
+COPY migrations/ ./migrations/
+
+ENV PYTHONPATH=/app
+
+RUN pip install --no-cache-dir . \
+    && python -m spacy download en_core_web_sm
+
+# stdio MCP server — no port exposed, no healthcheck (stdio has no HTTP surface)
+ENTRYPOINT ["python", "-m", "src.mcp"]
