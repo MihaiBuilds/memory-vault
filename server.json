@@ -1,0 +1,57 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.MihaiBuilds/memory-vault",
+  "title": "Memory Vault",
+  "description": "Local-first AI memory layer with hybrid search. Postgres + pgvector. Self-hosted, MIT.",
+  "websiteUrl": "https://mihaibuilds.com",
+  "repository": {
+    "url": "https://github.com/MihaiBuilds/memory-vault",
+    "source": "github"
+  },
+  "version": "1.0.6",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/mihaibuilds/memory-vault-mcp:1.0.6",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "DB_HOST",
+          "description": "Hostname of the Postgres+pgvector instance Memory Vault connects to (e.g. 'host.docker.internal' when Postgres runs on the host, 'localhost' when running natively, or the service name when both run in compose)",
+          "isRequired": true,
+          "format": "string"
+        },
+        {
+          "name": "DB_PORT",
+          "description": "Postgres port",
+          "isRequired": true,
+          "format": "string",
+          "default": "5432"
+        },
+        {
+          "name": "DB_NAME",
+          "description": "Postgres database name",
+          "isRequired": true,
+          "format": "string",
+          "default": "memory_vault"
+        },
+        {
+          "name": "DB_USER",
+          "description": "Postgres user with read/write access to the memory vault database",
+          "isRequired": true,
+          "format": "string",
+          "default": "memory_vault"
+        },
+        {
+          "name": "DB_PASSWORD",
+          "description": "Postgres password for DB_USER",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}
