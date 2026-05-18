@@ -12,6 +12,9 @@
 
 FROM python:3.14-slim
 
+# Ownership verification for the official MCP Registry — must match `name` in server.json
+LABEL io.modelcontextprotocol.server.name="io.github.mihaibuilds/memory-vault"
+
 WORKDIR /app
 
 # CPU-only PyTorch (sentence-transformers needs torch for embeddings)
