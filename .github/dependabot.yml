@@ -14,7 +14,8 @@ updates:
     commit-message:
       prefix: "deps(python)"
     groups:
-      python-minor-and-patch:
+      python-deps:
+        patterns: ["*"]
         update-types:
           - minor
           - patch
@@ -33,7 +34,8 @@ updates:
     commit-message:
       prefix: "deps(web)"
     groups:
-      web-minor-and-patch:
+      web-deps:
+        patterns: ["*"]
         update-types:
           - minor
           - patch
@@ -43,17 +45,32 @@ updates:
     directory: "/"
     schedule:
       interval: monthly
+    open-pull-requests-limit: 3
     labels:
       - dependencies
     commit-message:
       prefix: "deps(ci)"
+    groups:
+      ci-deps:
+        patterns: ["*"]
+        update-types:
+          - minor
+          - patch
+          - major
 
-  # Docker base image
+  # Docker base images
   - package-ecosystem: docker
     directory: "/"
     schedule:
       interval: monthly
+    open-pull-requests-limit: 2
     labels:
       - dependencies
     commit-message:
       prefix: "deps(docker)"
+    groups:
+      docker-deps:
+        patterns: ["*"]
+        update-types:
+          - minor
+          - patch
