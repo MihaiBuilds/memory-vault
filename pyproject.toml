@@ -21,7 +21,7 @@ dependencies = [
     "uvicorn[standard]>=0.27,<1",
     "python-multipart>=0.0.29",
     "pydantic>=2.5,<3",
-    "spacy>=3.7,<4",
+    "spacy>=3.8.14,<4",
     "structlog>=24.1,<26",
 ]
 
