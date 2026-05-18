@@ -22,7 +22,7 @@ dependencies = [
     "python-multipart>=0.0.29",
     "pydantic>=2.5,<3",
     "spacy>=3.7,<4",
-    "structlog>=24.1,<26",
+    "structlog>=25.5.0,<26",
 ]
 
 [project.optional-dependencies]
