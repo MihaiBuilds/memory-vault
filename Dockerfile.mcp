@@ -13,7 +13,7 @@
 FROM python:3.14-slim
 
 # Ownership verification for the official MCP Registry — must match `name` in server.json
-LABEL io.modelcontextprotocol.server.name="io.github.mihaibuilds/memory-vault"
+LABEL io.modelcontextprotocol.server.name="io.github.MihaiBuilds/memory-vault"
 
 WORKDIR /app
 
