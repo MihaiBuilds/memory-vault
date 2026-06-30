@@ -253,15 +253,23 @@ def _make_broad_variation(query: str, keywords: list[str]) -> str:
 def _build_where_clause(
     space_ids: list[int] | None,
     since: datetime | None,
+    include_superseded: bool = False,
 ) -> tuple[list[str], list[Any]]:
     """Build shared WHERE clauses for both search arms."""
     where_clauses: list[str] = ["(c.metadata->>'forgotten')::boolean IS NOT TRUE"]
     params: list[Any] = []
 
-    if space_ids:
-        placeholders = ", ".join(["%s"] * len(space_ids))
-        where_clauses.append(f"c.space_id IN ({placeholders})")
-        params.extend(space_ids)
+    if not include_superseded:
+        where_clauses.append("c.is_superseded = false")
+
+    if space_ids is not None:
+        if space_ids:
+            placeholders = ", ".join(["%s"] * len(space_ids))
+            where_clauses.append(f"c.space_id IN ({placeholders})")
+            params.extend(space_ids)
+        else:
+            # Caller requested specific spaces but none matched — return nothing.
+            where_clauses.append("false")
 
     if since:
         where_clauses.append("c.created_at >= %s")
@@ -277,6 +285,7 @@ async def hybrid_search(
     limit: int | None = None,
     *,
     enrich: bool = True,
+    include_superseded: bool = False,
 ) -> tuple[list[SearchResult], list[str], int]:
     """
     Hybrid search: vector (HNSW) + full-text (tsvector GIN) + RRF merging.
@@ -292,7 +301,7 @@ async def hybrid_search(
     variations = expand_query(query_text) if enrich else [query_text]
     vectors = embed_batch(variations) if len(variations) > 1 else [embed(variations[0])]
 
-    base_where, base_params = _build_where_clause(space_ids, since)
+    base_where, base_params = _build_where_clause(space_ids, since, include_superseded)
 
     # --- Arm 1: Vector search (multi-variation UNION ALL) ---
 

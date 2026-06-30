@@ -5,10 +5,13 @@ Exposes memory search, storage, and management to Claude Desktop and Claude Code
 via the Model Context Protocol (stdio transport).
 
 Tools:
-    recall         — search memory with hybrid search (vector + full-text + RRF)
-    remember       — store a new memory
-    forget         — soft-delete a memory chunk
-    memory_status  — system health + statistics
+    recall           — search memory with hybrid search (vector + full-text + RRF)
+    remember         — store a new memory (auto-creates unknown spaces)
+    forget           — soft-delete a memory chunk
+    move_memory      — move a chunk to a different space without re-embedding
+    supersede_memory — replace a chunk; old is hidden from recall by default
+    migrate_tags     — migrate [space:X]-prefixed chunks to named spaces
+    memory_status    — system health + statistics
 
 Resources:
     memory://spaces — list of memory spaces
@@ -21,6 +24,7 @@ import decimal
 import hashlib
 import json
 import logging
+import re
 import sys
 import uuid
 from datetime import UTC, datetime
@@ -149,6 +153,7 @@ async def recall(
     since: str | None = None,
     limit: int = 10,
     max_tokens: int = 2000,
+    include_superseded: bool = False,
 ) -> str:
     """
     Search your memories for information relevant to a query.
@@ -164,6 +169,8 @@ async def recall(
         since: Only return memories after this date (ISO format, e.g. "2025-01-01").
         limit: Maximum number of results (default 10, max 50).
         max_tokens: Token budget for results (default 2000).
+        include_superseded: If True, include chunks that have been superseded
+                            (hidden by default). Use for audit/history.
     """
     if not await _ensure_db():
         return _dumps(
@@ -191,9 +198,10 @@ async def recall(
 
         results, variations, elapsed_ms = await hybrid_search(
             query_text=query,
-            space_ids=space_ids or None,
+            space_ids=space_ids,
             since=since_dt,
             limit=limit,
+            include_superseded=include_superseded,
         )
 
         formatted = []
@@ -262,15 +270,7 @@ async def remember(
         return _dumps({"stored": False, "error": "Database offline"})
 
     try:
-        space_row = await fetch_one("SELECT id FROM memory_spaces WHERE name = %s", (space,))
-        if not space_row:
-            available = await fetch_all("SELECT name FROM memory_spaces ORDER BY name")
-            names = [r["name"] for r in available]
-            return _dumps(
-                {"stored": False, "error": f"Unknown space '{space}'. Available: {names}"}
-            )
-
-        space_id = space_row["id"]
+        space_id = await _ensure_space(space)
 
         # Embed
         embedding = embed(text)
@@ -389,6 +389,214 @@ def _classify_memory(text: str) -> tuple[str, float]:
         return "pattern", 0.7
 
     return "fact", 0.5
+
+
+# ---------------------------------------------------------------------------
+# Space auto-create helper (shared by remember / move_memory / supersede_memory)
+# ---------------------------------------------------------------------------
+
+_SPACE_TAG_RE = re.compile(r"^\[space:([a-zA-Z0-9_-]+)\]\s*")
+
+
+async def _ensure_space(name: str) -> int:
+    """Return the space ID for `name`, creating the space if it does not exist."""
+    await execute_query(
+        "INSERT INTO memory_spaces (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
+        (name,),
+    )
+    row = await fetch_one("SELECT id FROM memory_spaces WHERE name = %s", (name,))
+    return row["id"]
+
+
+# ---------------------------------------------------------------------------
+# Tool: move_memory
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def move_memory(chunk_id: str, to_space: str) -> str:
+    """
+    Move a chunk to a different memory space without re-embedding.
+
+    Preserves: chunk_id, content, embedding, created_at, importance, category.
+    The chunk no longer appears in searches scoped to its original space.
+
+    Args:
+        chunk_id: UUID of the chunk to move.
+        to_space: Name of the destination space (auto-created if new).
+    """
+    if not await _ensure_db():
+        return _dumps({"success": False, "error": "Database offline"})
+
+    try:
+        row = await fetch_one("SELECT id FROM chunks WHERE id = %s", (chunk_id,))
+        if not row:
+            return _dumps({"success": False, "error": f"Chunk {chunk_id} not found."})
+
+        new_space_id = await _ensure_space(to_space)
+        await execute_query(
+            "UPDATE chunks SET space_id = %s, updated_at = now() WHERE id = %s",
+            (new_space_id, chunk_id),
+        )
+        return _dumps({"success": True, "chunk_id": chunk_id, "moved_to": to_space})
+
+    except Exception as e:
+        logger.exception("move_memory failed")
+        return _dumps({"success": False, "error": str(e)})
+
+
+# ---------------------------------------------------------------------------
+# Tool: supersede_memory
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def supersede_memory(old_chunk_id: str, new_text: str, space: str | None = None) -> str:
+    """
+    Replace a chunk with updated content.
+
+    The new chunk is embedded and stored. The old chunk is marked is_superseded=true
+    and excluded from recall by default. Use recall(include_superseded=True) to
+    retrieve superseded chunks for audit.
+
+    Args:
+        old_chunk_id: UUID of the chunk to supersede.
+        new_text: Replacement memory text (re-embedded).
+        space: Space for the new chunk. Defaults to the old chunk's space.
+    """
+    if not await _ensure_db():
+        return _dumps({"stored": False, "error": "Database offline"})
+
+    try:
+        old_row = await fetch_one(
+            "SELECT id, space_id, speaker, importance FROM chunks WHERE id = %s",
+            (old_chunk_id,),
+        )
+        if not old_row:
+            return _dumps({"stored": False, "error": f"Chunk {old_chunk_id} not found."})
+
+        new_space_id = await _ensure_space(space) if space else old_row["space_id"]
+
+        embedding = embed(new_text)
+        content_hash = hashlib.sha256(new_text.encode()).hexdigest()
+        category, importance = _classify_memory(new_text)
+        meta = json.dumps({
+            "category": category,
+            "source": "mcp",
+            "content_hash": content_hash,
+            "supersedes": old_chunk_id,
+        })
+        new_chunk_id = str(uuid.uuid4())
+        await execute_query(
+            """INSERT INTO chunks
+                   (id, space_id, chunk_index, speaker, content, embedding,
+                    source, importance, metadata)
+               VALUES (%s, %s, 0, %s, %s, %s::vector, %s, %s, %s::jsonb)""",
+            (
+                new_chunk_id, new_space_id,
+                old_row["speaker"] or "human",
+                new_text, str(embedding),
+                "mcp:supersede",
+                importance, meta,
+            ),
+        )
+        await execute_query(
+            "UPDATE chunks SET is_superseded = true, superseded_by = %s, updated_at = now() "
+            "WHERE id = %s",
+            (new_chunk_id, old_chunk_id),
+        )
+        return _dumps({
+            "stored": True,
+            "new_chunk_id": new_chunk_id,
+            "superseded_chunk_id": old_chunk_id,
+            "message": f"Superseded {old_chunk_id!r} → {new_chunk_id!r}",
+        })
+
+    except Exception as e:
+        logger.exception("supersede_memory failed")
+        return _dumps({"stored": False, "error": str(e)})
+
+
+# ---------------------------------------------------------------------------
+# Tool: migrate_tags
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def migrate_tags() -> str:
+    """
+    Migrate [space:X]-prefixed chunks from `default` to their named spaces.
+
+    For each chunk in `default` whose content starts with `[space:X]`:
+      1. Ensure space X exists (auto-created if new).
+      2. Move the chunk to space X (update space_id).
+      3. Strip the `[space:X]` prefix and re-embed the stripped content.
+
+    Untagged chunks and chunks already outside `default` are skipped.
+    Idempotent: a second run finds no tagged chunks and returns moved=0.
+
+    Returns: {"moved": N, "skipped_untagged": M}
+    """
+    if not await _ensure_db():
+        return _dumps({"error": "Database offline"})
+
+    try:
+        rows = await fetch_all(
+            """SELECT c.id, c.content
+               FROM chunks c
+               JOIN memory_spaces ms ON ms.id = c.space_id
+               WHERE ms.name = 'default'
+                 AND c.importance > 0
+                 AND (c.metadata->>'forgotten')::boolean IS NOT TRUE
+                 AND c.is_superseded = false
+               ORDER BY c.created_at"""
+        )
+
+        moved = 0
+        skipped_untagged = 0
+
+        for row in rows:
+            m = _SPACE_TAG_RE.match(row["content"])
+            if not m:
+                skipped_untagged += 1
+                continue
+
+            target_space = m.group(1)
+            stripped = row["content"][m.end():]
+            new_space_id = await _ensure_space(target_space)
+            new_embedding = embed(stripped)
+            content_hash = hashlib.sha256(stripped.encode()).hexdigest()
+
+            await execute_query(
+                """UPDATE chunks
+                   SET space_id = %s,
+                       content = %s,
+                       embedding = %s::vector,
+                       metadata = metadata || %s::jsonb,
+                       updated_at = now()
+                   WHERE id = %s""",
+                (
+                    new_space_id,
+                    stripped,
+                    str(new_embedding),
+                    json.dumps({"content_hash": content_hash, "migrated_from_tag": True}),
+                    row["id"],
+                ),
+            )
+            moved += 1
+
+        return _dumps({
+            "moved": moved,
+            "skipped_untagged": skipped_untagged,
+            "message": (
+                f"Migrated {moved} chunk(s) to named spaces; "
+                f"{skipped_untagged} untagged chunk(s) left in default."
+            ),
+        })
+
+    except Exception as e:
+        logger.exception("migrate_tags failed")
+        return _dumps({"error": str(e)})
 
 
 # ---------------------------------------------------------------------------
