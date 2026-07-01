@@ -13,6 +13,23 @@ updates:
       - dependencies
     commit-message:
       prefix: "deps(python)"
+    # Ignore major-version bumps for packages that touch data semantics
+    # (embeddings, NER, vector storage). Their outputs can shift silently
+    # even when CI passes; require deliberate manual upgrades with a
+    # compatibility check.
+    ignore:
+      - dependency-name: "sentence-transformers"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "spacy"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "pgvector"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "transformers"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "torch"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "numpy"
+        update-types: ["version-update:semver-major"]
     groups:
       python-deps:
         patterns: ["*"]
