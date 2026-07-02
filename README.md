@@ -225,7 +225,7 @@ Once configured, Claude will have access to the memory tools. Try:
 
 > "Use memory_status to check the memory system."
 
-> "Remember that we decided to use PostgreSQL for all storage."
+> "Remember that we chose Redis for the session cache."
 
 > "Recall everything about hybrid search."
 
