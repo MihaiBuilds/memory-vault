@@ -47,7 +47,7 @@ class Entity:
 class Relationship:
     source_name: str
     target_name: str
-    type: str  # "related_to" (M7); other types reserved for future milestones
+    type: str  # "related_to"; other types reserved for future extraction work
 
 
 # Lazy-loaded module-level spaCy pipeline. None until first call or failed load.
@@ -139,12 +139,12 @@ def extract_entities(text: str) -> list[Entity]:
 def extract_relationships(entities: list[Entity], text: str) -> list[Relationship]:
     """Extract entity-to-entity relationships within a chunk.
 
-    M7 auto-extracts only `related_to` — co-occurrence of any two
-    distinct entities within the same chunk. Order is lexicographic on
+    Auto-extracts only `related_to` — co-occurrence of any two distinct
+    entities within the same chunk. Order is lexicographic on
     (source_name, target_name) for determinism; undirected semantics.
 
-    `text` is accepted but unused in M7 — reserved for future
-    directional or proximity-based extraction.
+    `text` is accepted but unused — reserved for future directional or
+    proximity-based extraction.
     """
     if not _SPACY_READY or len(entities) < 2:
         return []
