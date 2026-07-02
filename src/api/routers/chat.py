@@ -14,9 +14,9 @@ Both share the same RAG pipeline:
   5. Return answer + sources (sources emitted FIRST in stream so the UI can
      render the "based on N memories" header before tokens arrive)
 
-Hard rule (lesson from central-memory 2026-03-17): Qwen3.5 thinking models are
-unusable for RAG Q&A via OpenAI-compat — always prefer LM Studio native API
-with reasoning="off", or use a non-thinking model (Qwen2.5, Llama 3).
+Hard rule: Qwen3.5 thinking models are unusable for RAG Q&A via OpenAI-compat
+— always prefer LM Studio native API with reasoning="off", or use a
+non-thinking model (Qwen2.5, Llama 3).
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def _estimate_tokens(text: str) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Thinking-strip (ports from central-memory routes.py:341-392)
+# Thinking-strip
 # ---------------------------------------------------------------------------
 
 
