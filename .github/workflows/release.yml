@@ -47,6 +47,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
           # On a tag push the default branch flag is false, so re-enable :latest explicitly:
           flavor: |
