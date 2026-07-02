@@ -164,7 +164,7 @@ Located in `src/adapters/`:
 
 - **`markdown.py`** — splits by headings, preserves structure
 - **`plaintext.py`** — paragraph-based with smart merging
-- **`claude.py`** — parses Claude conversation exports (the format Memory Vault was originally built around)
+- **`claude.py`** — parses Claude conversation exports
 
 Each adapter returns `RawChunk(text, speaker, timestamp, chunk_index, metadata, content_hash)`. New adapters (PDF, web pages) are part of the PRO tier.
 
@@ -411,7 +411,7 @@ LLM extraction couples graph quality to whichever model you happened to pick and
 Memory Vault was designed around the assumption that the primary user of this database is going to be Claude, not me. The REST API exposes the same operations for human-driven apps, but the MCP server isn't a wrapper around the REST API — both are direct paths into the same service code.
 
 **Why MIT-licensed core?**
-Your AI memory should belong to you, not a cloud platform. A genuinely-useful free tier (not crippleware) is what builds the community and trust. The PRO tier is operational/scale features that teams pay for — multi-user activation, dedup with importance decay, encrypted backups, conflict resolution, additional adapters — not capabilities withheld from individual users.
+Your AI memory should belong to you, not a cloud platform. The free tier is the full personal-memory product. The PRO tier adds operational and scale features that teams pay for — multi-user activation, dedup with importance decay, encrypted backups, conflict resolution, additional adapters.
 
 ---
 

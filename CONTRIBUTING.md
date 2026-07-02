@@ -47,7 +47,7 @@ Every API response includes an `X-Request-ID` header. If a bug happens during an
 Use the [feature request template](.github/ISSUE_TEMPLATE/feature_request.yml). Two things make a feature request likely to land:
 
 1. **Frame the problem first, then propose a solution.** "I can't do X because Y" beats "please add Z."
-2. **Check the [Limitations section in the README](README.md#limitations).** If it overlaps with a documented v1.0 limitation, a +1 on the existing issue (or opening one) is more useful than a duplicate request.
+2. **Check the [Limitations section in the README](README.md#v10-limitations-honest).** If it overlaps with a documented v1.0 limitation, a +1 on the existing issue (or opening one) is more useful than a duplicate request.
 
 Big features (new endpoints, new UI pages, new external integrations) should be discussed in an issue *before* any code is written. Drive-by PRs for big features will likely be closed politely.
 
@@ -132,7 +132,6 @@ Memory Vault is small enough that consistency matters more than rules. The gener
 
 - Imperative mood ("add chat router", not "added chat router")
 - One logical change per commit when reasonable
-- No `Co-Authored-By` lines
 
 **What to avoid**
 

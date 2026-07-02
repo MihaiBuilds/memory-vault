@@ -6,7 +6,7 @@ Memory Vault runs on Windows via Docker Desktop. This page covers the two issues
 
 If you see this error when starting the container (and the container exits with code 255), it's a line-ending issue, not a missing file. Windows git installs default to `core.autocrlf=true`, which can rewrite `scripts/start.sh` with `\r\n` line endings. Linux then reads the shebang as `#!/bin/sh\r` and tries to run an interpreter literally named `sh\r`.
 
-Memory Vault now ships with defensive `.gitattributes` rules and strips carriage returns inside the Docker image, so fresh clones should just work. If you cloned before this fix, or you still hit the error, run this **inside the repo** — do NOT change your global git config, it will break your other Windows projects:
+Memory Vault ships with defensive `.gitattributes` rules and strips carriage returns inside the Docker image, so fresh clones should just work. If you still hit the error, run this **inside the repo** — don't change your global git config, since that can affect your other Windows projects:
 
 ```bash
 cd memory-vault

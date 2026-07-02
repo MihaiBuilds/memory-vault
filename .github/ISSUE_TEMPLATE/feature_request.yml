@@ -9,7 +9,7 @@ body:
         Memory Vault is a single-maintainer project with a deliberately small scope. Feature requests that frame a real problem are far more likely to land than ones that propose a solution in a vacuum.
 
         **Before opening:**
-        - Check the [Limitations section in the README](https://github.com/MihaiBuilds/memory-vault#limitations) — if it overlaps a documented v1.0 limitation, +1 the existing issue instead of opening a new one
+        - Check the [Limitations section in the README](https://github.com/MihaiBuilds/memory-vault#v10-limitations-honest) — if it overlaps a documented v1.0 limitation, +1 the existing issue instead of opening a new one
         - Search existing issues for duplicates
         - Big features (new endpoints, new UI pages, new integrations) need to be discussed *before* any code is written
 
