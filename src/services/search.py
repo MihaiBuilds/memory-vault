@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from src.config import settings
-from src.models.db import execute_query, fetch_all, fetch_one
+from src.models.db import execute_query, fetch_all, fetch_one, has_column
 from src.services.embedding import _get_model, embed, embed_batch
 
 logger = logging.getLogger(__name__)
@@ -250,17 +250,29 @@ def _make_broad_variation(query: str, keywords: list[str]) -> str:
     return q
 
 
-def _build_where_clause(
+async def _build_where_clause(
     space_ids: list[int] | None,
     since: datetime | None,
     include_superseded: bool = False,
 ) -> tuple[list[str], list[Any]]:
-    """Build shared WHERE clauses for both search arms."""
+    """Build shared WHERE clauses for both search arms.
+
+    `is_superseded` (migrations/004_supersede_move.sql) is not applied to every
+    database yet — schema migration is a separate, deliberate task, scheduled
+    later. Until it lands, `importance > 0` is the interim proxy for "not
+    retired": the same signal memory_status()'s "active" count already uses.
+    Once the migration is applied, has_column() flips to True and this
+    function automatically uses the real column — no further code change
+    needed here.
+    """
     where_clauses: list[str] = ["(c.metadata->>'forgotten')::boolean IS NOT TRUE"]
     params: list[Any] = []
 
     if not include_superseded:
-        where_clauses.append("c.is_superseded = false")
+        if await has_column("chunks", "is_superseded"):
+            where_clauses.append("c.is_superseded = false")
+        else:
+            where_clauses.append("c.importance > 0")
 
     if space_ids is not None:
         if space_ids:
@@ -301,7 +313,7 @@ async def hybrid_search(
     variations = expand_query(query_text) if enrich else [query_text]
     vectors = embed_batch(variations) if len(variations) > 1 else [embed(variations[0])]
 
-    base_where, base_params = _build_where_clause(space_ids, since, include_superseded)
+    base_where, base_params = await _build_where_clause(space_ids, since, include_superseded)
 
     # --- Arm 1: Vector search (multi-variation UNION ALL) ---
 

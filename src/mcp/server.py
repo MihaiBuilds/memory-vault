@@ -46,6 +46,7 @@ from src.models.db import (  # noqa: E402
     execute_query,
     fetch_all,
     fetch_one,
+    has_column,
     health_check,
     init_pool,
 )
@@ -397,9 +398,45 @@ def _classify_memory(text: str) -> tuple[str, float]:
 
 _SPACE_TAG_RE = re.compile(r"^\[space:([a-zA-Z0-9_-]+)\]\s*")
 
+# The real multi-space model (auto-created spaces, move_memory, supersede_memory,
+# migrate_tags) ships together with migrations/004_supersede_move.sql — bundled as
+# one upgrade in the feature branch, and gated together here. Checking for
+# `is_superseded` is a proxy for "has migration 004 been applied", used uniformly
+# below rather than probing each new column individually.
+_UPGRADE_UNAVAILABLE_SUFFIX = (
+    "unavailable until the pending schema migration "
+    "(migrations/004_supersede_move.sql) is applied to this database. "
+    "Use the [space:X] text-tag convention within the 'default' space for now "
+    "(see migrate_tags)."
+)
+
+
+async def _upgrade_schema_ready() -> bool:
+    """Whether migrations/004_supersede_move.sql has been applied to this database."""
+    return await has_column("chunks", "is_superseded")
+
 
 async def _ensure_space(name: str) -> int:
-    """Return the space ID for `name`, creating the space if it does not exist."""
+    """
+    Return the space ID for `name`.
+
+    Creating a NEW space is deferred behind the pending schema migration (see
+    `_UPGRADE_UNAVAILABLE_SUFFIX`) — until then, only ALREADY-EXISTING spaces (in
+    practice, just "default") can be resolved. Raises ValueError for an unknown
+    name so callers (remember / move_memory / supersede_memory) surface a clear
+    message instead of silently fragmenting the interim [space:X]-tag convention,
+    which stays the operative model for now.
+    """
+    row = await fetch_one("SELECT id FROM memory_spaces WHERE name = %s", (name,))
+    if row:
+        return row["id"]
+
+    if not await _upgrade_schema_ready():
+        raise ValueError(
+            f"memory space {name!r} does not exist yet, and creating new spaces is "
+            f"{_UPGRADE_UNAVAILABLE_SUFFIX}"
+        )
+
     await execute_query(
         "INSERT INTO memory_spaces (name) VALUES (%s) ON CONFLICT (name) DO NOTHING",
         (name,),
@@ -427,6 +464,9 @@ async def move_memory(chunk_id: str, to_space: str) -> str:
     """
     if not await _ensure_db():
         return _dumps({"success": False, "error": "Database offline"})
+
+    if not await _upgrade_schema_ready():
+        return _dumps({"success": False, "error": f"move_memory is {_UPGRADE_UNAVAILABLE_SUFFIX}"})
 
     try:
         row = await fetch_one("SELECT id FROM chunks WHERE id = %s", (chunk_id,))
@@ -466,6 +506,11 @@ async def supersede_memory(old_chunk_id: str, new_text: str, space: str | None =
     """
     if not await _ensure_db():
         return _dumps({"stored": False, "error": "Database offline"})
+
+    if not await _upgrade_schema_ready():
+        return _dumps(
+            {"stored": False, "error": f"supersede_memory is {_UPGRADE_UNAVAILABLE_SUFFIX}"}
+        )
 
     try:
         old_row = await fetch_one(
@@ -539,6 +584,9 @@ async def migrate_tags() -> str:
     """
     if not await _ensure_db():
         return _dumps({"error": "Database offline"})
+
+    if not await _upgrade_schema_ready():
+        return _dumps({"error": f"migrate_tags is {_UPGRADE_UNAVAILABLE_SUFFIX}"})
 
     try:
         rows = await fetch_all(

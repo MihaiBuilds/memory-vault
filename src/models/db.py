@@ -98,6 +98,26 @@ async def fetch_all(
         return await cur.fetchall()  # type: ignore[return-value]
 
 
+async def has_column(table: str, column: str) -> bool:
+    """
+    Whether `column` exists on `table` in the connected database.
+
+    Used to detect whether a not-yet-applied migration's columns are available, so
+    callers can degrade gracefully (an interim compatibility proxy, or a clear
+    "unavailable until migration" message) instead of erroring or half-writing
+    against a database that's behind the code. No caching: called rarely (once per
+    recall/mutation call, not in a hot loop), and a schema change applied while the
+    server is running should be picked up on the very next call, not require a
+    restart to notice.
+    """
+    row = await fetch_one(
+        """SELECT 1 FROM information_schema.columns
+           WHERE table_name = %s AND column_name = %s""",
+        (table, column),
+    )
+    return row is not None
+
+
 async def health_check() -> dict[str, Any]:
     """Run a lightweight check and return pool + server status."""
     pool = await get_pool()
