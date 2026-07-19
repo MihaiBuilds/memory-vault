@@ -85,6 +85,16 @@ updates:
       - dependencies
     commit-message:
       prefix: "deps(docker)"
+    # Pin the Python base image at the 3.13 minor. Heavy C-extension deps
+    # (spaCy, torch, numpy) lag cp3XX wheels by 6-12+ months after new
+    # Python major.minor releases; auto-bumping to bleeding-edge Python
+    # ships containers that can't install their own deps. See issue #79.
+    # Patch bumps (3.13.14 → 3.13.15) are still allowed automatically.
+    ignore:
+      - dependency-name: "python"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
     groups:
       docker-deps:
         patterns: ["*"]

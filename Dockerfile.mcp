@@ -10,7 +10,7 @@
 #
 # Built and pushed by .github/workflows/release.yml on every v*.*.* tag.
 
-FROM python:3.14-slim
+FROM python:3.13-slim
 
 # Ownership verification for the official MCP Registry — must match `name` in server.json
 LABEL io.modelcontextprotocol.server.name="io.github.MihaiBuilds/memory-vault"
