@@ -61,7 +61,7 @@ The same memory layer is reachable from four equal first-class clients: **MCP** 
 
 ## Storage — PostgreSQL 16 + pgvector
 
-Everything lives in a single Postgres database with the `pgvector` extension. Migrations are versioned and forward-only (`migrations/001_initial_schema.sql`, `002_api_tokens.sql`, `003_knowledge_graph.sql`) and run automatically on first start.
+Everything lives in a single Postgres database with the `pgvector` extension. Migrations are versioned and forward-only (`src/memory_vault/migrations/001_initial_schema.sql`, `002_api_tokens.sql`, `003_knowledge_graph.sql`) and run automatically on first start.
 
 ### Tables
 

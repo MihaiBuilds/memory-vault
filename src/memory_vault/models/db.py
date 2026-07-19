@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 _pool: AsyncConnectionPool | None = None
 
-MIGRATIONS_DIR = Path(__file__).resolve().parent.parent.parent / "migrations"
+MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
 
 
 async def init_pool(min_size: int = 2, max_size: int = 10) -> AsyncConnectionPool:

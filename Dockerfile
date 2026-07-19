@@ -24,10 +24,9 @@ WORKDIR /app
 # Install CPU-only PyTorch first (avoids pulling the 2GB CUDA version)
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
-# Copy project files
+# Copy project files (migrations travel inside src/memory_vault/)
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
-COPY migrations/ ./migrations/
 COPY scripts/start.sh ./scripts/start.sh
 
 # Copy the built dashboard into the package's static dir so it's bundled by the pip install

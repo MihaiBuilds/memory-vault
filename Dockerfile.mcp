@@ -22,7 +22,6 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
-COPY migrations/ ./migrations/
 
 RUN pip install --no-cache-dir . \
     && python -m spacy download en_core_web_sm

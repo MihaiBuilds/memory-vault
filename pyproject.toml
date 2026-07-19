@@ -61,3 +61,4 @@ exclude = ["tests*"]
 
 [tool.setuptools.package-data]
 "memory_vault.api" = ["static/**/*"]
+"memory_vault" = ["migrations/*.sql"]

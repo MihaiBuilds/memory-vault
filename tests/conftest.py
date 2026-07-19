@@ -39,7 +39,7 @@ ADMIN_DSN = (
     f"@{os.environ['DB_HOST']}:{os.environ['DB_PORT']}/postgres"
 )
 TEST_DB_NAME = "memory_vault_test"
-MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
+MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "src" / "memory_vault" / "migrations"
 
 
 # ---------------------------------------------------------------------------
