@@ -109,9 +109,9 @@ def _split_by_sentences(text: str, max_words: int) -> list[str]:
 
 def detect_adapter(file_path: str, content: str = "") -> SourceAdapter:
     """Auto-detect the right adapter for a file."""
-    from src.adapters.claude import ClaudeJsonAdapter
-    from src.adapters.markdown import MarkdownAdapter
-    from src.adapters.plaintext import PlainTextAdapter
+    from memory_vault.adapters.claude import ClaudeJsonAdapter
+    from memory_vault.adapters.markdown import MarkdownAdapter
+    from memory_vault.adapters.plaintext import PlainTextAdapter
 
     path_lower = file_path.lower()
 

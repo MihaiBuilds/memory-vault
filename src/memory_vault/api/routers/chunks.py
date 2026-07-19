@@ -7,9 +7,9 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from src.api.deps import require_token
-from src.api.schemas import ChunkList, ChunkSummary, ForgetResponse
-from src.models.db import execute_query, fetch_all, fetch_one
+from memory_vault.api.deps import require_token
+from memory_vault.api.schemas import ChunkList, ChunkSummary, ForgetResponse
+from memory_vault.models.db import execute_query, fetch_all, fetch_one
 
 router = APIRouter(prefix="/api", tags=["chunks"], dependencies=[Depends(require_token)])
 

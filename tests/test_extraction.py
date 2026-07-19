@@ -9,7 +9,7 @@ produces, so mocking would test the mock, not the code.
 
 from __future__ import annotations
 
-from src.extraction.spacy_extractor import (
+from memory_vault.extraction.spacy_extractor import (
     _SPACY_READY,
     Entity,
     Relationship,

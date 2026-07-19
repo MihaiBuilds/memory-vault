@@ -19,6 +19,9 @@ venv/
 .env.*.local
 .pytest_cache/
 
+# Runtime logs (never commit — contains chunk IDs, timestamps, environment specifics)
+logs/
+
 # Secrets — never commit
 *.pem
 *.key

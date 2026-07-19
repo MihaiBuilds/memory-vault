@@ -12,7 +12,7 @@ from typing import Any
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
-from src.config import settings
+from memory_vault.config import settings
 
 logger = logging.getLogger(__name__)
 

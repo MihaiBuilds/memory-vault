@@ -160,7 +160,7 @@ Async pipeline. Adapters convert different input formats into a list of `RawChun
 
 ### Adapters (v1.0)
 
-Located in `src/adapters/`:
+Located in `src/memory_vault/adapters/`:
 
 - **`markdown.py`** — splits by headings, preserves structure
 - **`plaintext.py`** — paragraph-based with smart merging
@@ -278,10 +278,8 @@ For Claude Code, in your project's `.mcp.json`:
   "mcpServers": {
     "memory-vault": {
       "command": "python",
-      "args": ["-m", "src.mcp"],
-      "cwd": "/path/to/memory-vault",
+      "args": ["-m", "memory_vault.mcp"],
       "env": {
-        "PYTHONPATH": "/path/to/memory-vault",
         "DB_HOST": "localhost",
         "DB_PORT": "5432",
         "DB_NAME": "memory_vault",
@@ -303,7 +301,7 @@ See the [README](README.md#mcp-integration-claude-desktop--claude-code) for setu
 
 ## Web Dashboard
 
-React 19 + Vite + TanStack Query, built into a static bundle at image build time and served by FastAPI from `src/api/static/`. No separate process, no separate port, no `npm start` in production.
+React 19 + Vite + TanStack Query, built into a static bundle at image build time and served by FastAPI from `src/memory_vault/api/static/`. No separate process, no separate port, no `npm start` in production.
 
 ### Pages (v1.0)
 
@@ -385,7 +383,7 @@ services:
       db: { condition: service_healthy }
 ```
 
-The image is **multi-stage**: stage 1 is a Node 20 builder that runs `npm run build` to produce the dashboard bundle; stage 2 is a Python 3.11 runtime that pip-installs the package, downloads the spaCy `en_core_web_sm` model, and copies the dashboard bundle into `src/api/static/`.
+The image is **multi-stage**: stage 1 is a Node 20 builder that runs `npm run build` to produce the dashboard bundle; stage 2 is a Python 3.11 runtime that pip-installs the package, downloads the spaCy `en_core_web_sm` model, and copies the dashboard bundle into `src/memory_vault/api/static/`.
 
 Released images are published to **`ghcr.io/mihaibuilds/memory-vault`** for both `linux/amd64` and `linux/arm64` (Apple Silicon, Raspberry Pi 4+, ARM VPSs). The release workflow (`.github/workflows/release.yml`) handles the multi-arch build on every `v*.*.*` tag.
 

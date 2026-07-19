@@ -31,14 +31,14 @@ import httpx
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from src.api.deps import require_token
-from src.api.schemas import (
+from memory_vault.api.deps import require_token
+from memory_vault.api.schemas import (
     ChatMessage,
     ChatRequest,
     ChatResponse,
     ChatSource,
 )
-from src.services.search import SearchResult, hybrid_search, resolve_space_names
+from memory_vault.services.search import SearchResult, hybrid_search, resolve_space_names
 
 logger = logging.getLogger(__name__)
 

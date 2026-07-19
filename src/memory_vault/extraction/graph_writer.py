@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import logging
 
-from src.extraction.spacy_extractor import Entity, Relationship
-from src.models.db import get_pool
+from memory_vault.extraction.spacy_extractor import Entity, Relationship
+from memory_vault.models.db import get_pool
 
 logger = logging.getLogger(__name__)
 

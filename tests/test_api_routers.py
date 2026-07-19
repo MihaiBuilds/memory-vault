@@ -57,7 +57,7 @@ class TestAuth:
         assert r.status_code == 200
 
     async def test_revoked_token_returns_401(self, client, auth_token):
-        from src.api.deps import revoke_token
+        from memory_vault.api.deps import revoke_token
 
         prefix = auth_token[:11]
         ok = await revoke_token(prefix)

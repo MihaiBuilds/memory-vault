@@ -16,9 +16,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from src.config import settings
-from src.models.db import execute_query, fetch_all, fetch_one
-from src.services.embedding import _get_model, embed, embed_batch
+from memory_vault.config import settings
+from memory_vault.models.db import execute_query, fetch_all, fetch_one
+from memory_vault.services.embedding import _get_model, embed, embed_batch
 
 logger = logging.getLogger(__name__)
 

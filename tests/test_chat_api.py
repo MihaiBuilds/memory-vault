@@ -20,12 +20,12 @@ import json
 
 import pytest
 
-from src.api.routers.chat import (
+from memory_vault.api.routers.chat import (
     _apply_token_budget,
     _strip_thinking,
 )
-from src.api.schemas import ChatMessage
-from src.services.search import SearchResult
+from memory_vault.api.schemas import ChatMessage
+from memory_vault.services.search import SearchResult
 
 # Async tests opt in individually — pure-function tests below should NOT
 # be auto-marked async (pytest-asyncio warns when sync functions carry the mark).

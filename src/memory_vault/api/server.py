@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import uvicorn
 
-from src.api.app import create_app
-from src.config import settings
+from memory_vault.api.app import create_app
+from memory_vault.config import settings
 
 app = create_app()
 
 
 def main() -> None:
     uvicorn.run(
-        "src.api.server:app",
+        "memory_vault.api.server:app",
         host=settings.api_host,
         port=settings.api_port,
         log_level="info",

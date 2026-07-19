@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from src.api.app import _parse_cors_origins, _safe_static_path
-from src.api.deps import generate_token, hash_token
-from src.api.schemas import (
+from memory_vault.api.app import _parse_cors_origins, _safe_static_path
+from memory_vault.api.deps import generate_token, hash_token
+from memory_vault.api.schemas import (
     IngestTextRequest,
     SearchRequest,
     SpaceInfo,

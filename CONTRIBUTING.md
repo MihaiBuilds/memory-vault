@@ -88,7 +88,7 @@ memory-vault migrate
 memory-vault status   # sanity check
 
 # Run the API in dev mode
-uvicorn src.api.app:app --reload --port 8000
+uvicorn memory_vault.api.app:app --reload --port 8000
 ```
 
 ### Dashboard setup
@@ -118,7 +118,7 @@ Memory Vault is small enough that consistency matters more than rules. The gener
 - Python 3.11+, type hints on public functions
 - Raw SQL via `psycopg`, no ORM
 - `async`/`await` in the API layer; sync is fine for CLI and ingestion
-- Errors at HTTP boundaries return structured JSON (see `src/api/app.py` exception handlers) — never leak stack traces
+- Errors at HTTP boundaries return structured JSON (see `src/memory_vault/api/app.py` exception handlers) — never leak stack traces
 - Log identifiers (chunk IDs, space IDs, model names), never user content
 
 **TypeScript / React**

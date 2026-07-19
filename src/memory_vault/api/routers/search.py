@@ -6,9 +6,9 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from src.api.deps import require_token
-from src.api.schemas import SearchHit, SearchRequest, SearchResponse
-from src.services.search import hybrid_search, log_query, resolve_space_names
+from memory_vault.api.deps import require_token
+from memory_vault.api.schemas import SearchHit, SearchRequest, SearchResponse
+from memory_vault.services.search import hybrid_search, log_query, resolve_space_names
 
 router = APIRouter(prefix="/api", tags=["search"], dependencies=[Depends(require_token)])
 

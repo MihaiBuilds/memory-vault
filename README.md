@@ -174,10 +174,8 @@ Add to your project's `.mcp.json`:
   "mcpServers": {
     "memory-vault": {
       "command": "python",
-      "args": ["-m", "src.mcp"],
-      "cwd": "/path/to/memory-vault",
+      "args": ["-m", "memory_vault.mcp"],
       "env": {
-        "PYTHONPATH": "/path/to/memory-vault",
         "DB_HOST": "localhost",
         "DB_PORT": "5432",
         "DB_NAME": "memory_vault",
@@ -202,10 +200,8 @@ If you're running Memory Vault via Docker, point `DB_HOST` at the Docker host:
   "mcpServers": {
     "memory-vault": {
       "command": "python",
-      "args": ["-m", "src.mcp"],
-      "cwd": "/path/to/memory-vault",
+      "args": ["-m", "memory_vault.mcp"],
       "env": {
-        "PYTHONPATH": "/path/to/memory-vault",
         "DB_HOST": "127.0.0.1",
         "DB_PORT": "5432",
         "DB_NAME": "memory_vault",

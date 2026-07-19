@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from src.api.schemas import HealthResponse
-from src.models.db import health_check
-from src.services.embedding import MODEL_NAME
+from memory_vault.api.schemas import HealthResponse
+from memory_vault.models.db import health_check
+from memory_vault.services.embedding import MODEL_NAME
 
 router = APIRouter(prefix="/api", tags=["health"])
 

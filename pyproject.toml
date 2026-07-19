@@ -49,8 +49,15 @@ ignore = [
 quote-style = "double"
 
 [project.scripts]
-memory-vault = "src.cli:main"
+memory-vault = "memory_vault.cli:main"
 
 [build-system]
 requires = ["setuptools>=82.0.1"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+"memory_vault.api" = ["static/**/*"]

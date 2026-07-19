@@ -17,23 +17,21 @@ RUN npm run build
 # ---------------------------------------------------------------------------
 # Stage 2 — Python runtime
 # ---------------------------------------------------------------------------
-FROM python:3.14-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 
 # Install CPU-only PyTorch first (avoids pulling the 2GB CUDA version)
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
-# Copy project files and install
-COPY pyproject.toml ./
+# Copy project files
+COPY pyproject.toml README.md ./
 COPY src/ ./src/
 COPY migrations/ ./migrations/
 COPY scripts/start.sh ./scripts/start.sh
 
-# Copy the built dashboard into the static dir that FastAPI mounts at /
-COPY --from=web-builder /web/dist/ ./src/api/static/
-
-ENV PYTHONPATH=/app
+# Copy the built dashboard into the package's static dir so it's bundled by the pip install
+COPY --from=web-builder /web/dist/ ./src/memory_vault/api/static/
 
 RUN pip install --no-cache-dir . \
     && sed -i 's/\r$//' ./scripts/start.sh \
