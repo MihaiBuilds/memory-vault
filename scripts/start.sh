@@ -30,11 +30,11 @@ done
 
 # Run migrations
 echo "Running migrations..."
-python -m src.cli migrate
+memory-vault migrate
 
 # Show status
 echo ""
-python -m src.cli status
+memory-vault status
 
 echo ""
 echo "============================================"
@@ -46,4 +46,4 @@ echo "  Docs:     http://${API_HOST:-0.0.0.0}:${API_PORT:-8000}/docs"
 echo ""
 
 # Start the REST API (uvicorn)
-exec python -m src.cli api
+exec memory-vault api

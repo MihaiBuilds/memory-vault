@@ -18,11 +18,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.deps import RateLimitMiddleware
-from src.api.middleware import RequestIDMiddleware
-from src.api.routers import chat, chunks, graph, health, ingest, search, spaces
-from src.logging_config import configure_logging
-from src.models.db import close_pool, init_pool
+from memory_vault.api.deps import RateLimitMiddleware
+from memory_vault.api.middleware import RequestIDMiddleware
+from memory_vault.api.routers import chat, chunks, graph, health, ingest, search, spaces
+from memory_vault.logging_config import configure_logging
+from memory_vault.models.db import close_pool, init_pool
 
 configure_logging()
 logger = logging.getLogger(__name__)

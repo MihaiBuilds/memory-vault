@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.models.db import fetch_all, fetch_one
+from memory_vault.models.db import fetch_all, fetch_one
 
 pytestmark = pytest.mark.asyncio
 

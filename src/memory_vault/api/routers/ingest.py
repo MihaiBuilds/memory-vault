@@ -8,10 +8,10 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
-from src.api.deps import require_token
-from src.api.schemas import IngestResponse, IngestTextRequest
-from src.models.db import fetch_one
-from src.services.ingestion import IngestionPipeline, ingest_text
+from memory_vault.api.deps import require_token
+from memory_vault.api.schemas import IngestResponse, IngestTextRequest
+from memory_vault.models.db import fetch_one
+from memory_vault.services.ingestion import IngestionPipeline, ingest_text
 
 logger = logging.getLogger(__name__)
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import zipfile
 
-from src.diagnose import (
+from memory_vault.diagnose import (
     _collect_env,
     _redact_line,
     _redact_log_text,

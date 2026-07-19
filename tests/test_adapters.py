@@ -4,10 +4,10 @@ Tests for source adapters — Markdown, PlainText, Claude JSON, and auto-detecti
 
 import json
 
-from src.adapters.base import RawChunk, _word_count, detect_adapter
-from src.adapters.claude import ClaudeJsonAdapter
-from src.adapters.markdown import MarkdownAdapter
-from src.adapters.plaintext import PlainTextAdapter
+from memory_vault.adapters.base import RawChunk, _word_count, detect_adapter
+from memory_vault.adapters.claude import ClaudeJsonAdapter
+from memory_vault.adapters.markdown import MarkdownAdapter
+from memory_vault.adapters.plaintext import PlainTextAdapter
 
 
 class TestRawChunk:

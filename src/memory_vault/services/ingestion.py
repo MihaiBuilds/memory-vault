@@ -15,14 +15,14 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
 
-from src.adapters.base import RawChunk, detect_adapter
-from src.extraction import (
+from memory_vault.adapters.base import RawChunk, detect_adapter
+from memory_vault.extraction import (
     extract_entities,
     extract_relationships,
     write_graph_for_chunk,
 )
-from src.models.db import execute_query, fetch_one
-from src.services.embedding import embed_batch
+from memory_vault.models.db import execute_query, fetch_one
+from memory_vault.services.embedding import embed_batch
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +180,7 @@ async def ingest_text(
     speaker: str | None = None,
 ) -> str:
     """Quick-ingest a single text string. Returns the chunk ID."""
-    from src.services.embedding import embed
+    from memory_vault.services.embedding import embed
 
     # Resolve space name to ID
     row = await fetch_one("SELECT id FROM memory_spaces WHERE name = %s", (space,))

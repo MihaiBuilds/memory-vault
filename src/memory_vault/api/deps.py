@@ -20,7 +20,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response
 
-from src.models.db import execute_query, fetch_all
+from memory_vault.models.db import execute_query, fetch_all
 
 logger = logging.getLogger(__name__)
 

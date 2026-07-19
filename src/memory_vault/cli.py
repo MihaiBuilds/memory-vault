@@ -18,7 +18,7 @@ import argparse
 import asyncio
 import sys
 
-from src.logging_config import configure_logging
+from memory_vault.logging_config import configure_logging
 
 configure_logging()
 
@@ -101,11 +101,11 @@ def main() -> None:
     elif args.command == "status":
         asyncio.run(_cmd_status())
     elif args.command == "mcp":
-        from src.mcp.server import main as mcp_main
+        from memory_vault.mcp.server import main as mcp_main
 
         mcp_main()
     elif args.command == "api":
-        from src.api.server import main as api_main
+        from memory_vault.api.server import main as api_main
 
         api_main()
     elif args.command == "token":
@@ -121,13 +121,13 @@ def main() -> None:
     elif args.command == "diagnose":
         from pathlib import Path
 
-        from src.diagnose import cli_diagnose
+        from memory_vault.diagnose import cli_diagnose
 
         cli_diagnose(Path(args.out_dir) if args.out_dir else None)
 
 
 async def _cmd_migrate() -> None:
-    from src.models.db import close_pool, init_pool, run_migrations
+    from memory_vault.models.db import close_pool, init_pool, run_migrations
 
     await init_pool()
     await run_migrations()
@@ -138,8 +138,8 @@ async def _cmd_migrate() -> None:
 async def _cmd_ingest(file_path: str, space: str) -> None:
     from pathlib import Path
 
-    from src.models.db import close_pool, fetch_one, init_pool
-    from src.services.ingestion import IngestionPipeline
+    from memory_vault.models.db import close_pool, fetch_one, init_pool
+    from memory_vault.services.ingestion import IngestionPipeline
 
     path = Path(file_path)
     if not path.exists():
@@ -164,8 +164,8 @@ async def _cmd_ingest(file_path: str, space: str) -> None:
 
 
 async def _cmd_search(query: str, space: str | None, limit: int) -> None:
-    from src.models.db import close_pool, init_pool
-    from src.services.search import hybrid_search, resolve_space_names
+    from memory_vault.models.db import close_pool, init_pool
+    from memory_vault.services.search import hybrid_search, resolve_space_names
 
     await init_pool()
 
@@ -193,8 +193,8 @@ async def _cmd_search(query: str, space: str | None, limit: int) -> None:
 
 
 async def _cmd_token(args) -> None:
-    from src.api.deps import create_token, revoke_token
-    from src.models.db import close_pool, fetch_all, init_pool
+    from memory_vault.api.deps import create_token, revoke_token
+    from memory_vault.models.db import close_pool, fetch_all, init_pool
 
     await init_pool()
     try:
@@ -235,7 +235,7 @@ async def _cmd_token(args) -> None:
 async def _cmd_space(args) -> None:
     import re
 
-    from src.models.db import close_pool, execute_query, fetch_all, fetch_one, init_pool
+    from memory_vault.models.db import close_pool, execute_query, fetch_all, fetch_one, init_pool
 
     await init_pool()
     try:
@@ -274,7 +274,7 @@ async def _cmd_space(args) -> None:
 
 
 async def _cmd_status() -> None:
-    from src.models.db import close_pool, fetch_all, fetch_one, health_check, init_pool
+    from memory_vault.models.db import close_pool, fetch_all, fetch_one, health_check, init_pool
 
     await init_pool()
 

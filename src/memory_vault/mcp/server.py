@@ -38,15 +38,15 @@ if _project_root not in sys.path:
 
 from mcp.server.fastmcp import FastMCP  # noqa: E402
 
-from src.models.db import (  # noqa: E402
+from memory_vault.models.db import (  # noqa: E402
     execute_query,
     fetch_all,
     fetch_one,
     health_check,
     init_pool,
 )
-from src.services.embedding import MODEL_NAME, embed  # noqa: E402
-from src.services.search import hybrid_search, resolve_space_names  # noqa: E402
+from memory_vault.services.embedding import MODEL_NAME, embed  # noqa: E402
+from memory_vault.services.search import hybrid_search, resolve_space_names  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,

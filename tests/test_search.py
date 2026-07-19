@@ -5,7 +5,7 @@ These tests don't require a database connection — they test the pure logic.
 Integration tests with the full hybrid search pipeline require a running PostgreSQL.
 """
 
-from src.services.search import _build_tsquery, expand_query
+from memory_vault.services.search import _build_tsquery, expand_query
 
 
 class TestExpandQuery:

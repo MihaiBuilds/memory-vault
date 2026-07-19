@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from src.api.deps import require_token
-from src.api.schemas import SpaceCreateRequest, SpaceInfo, SpaceList
-from src.models.db import execute_query, fetch_all, fetch_one
+from memory_vault.api.deps import require_token
+from memory_vault.api.schemas import SpaceCreateRequest, SpaceInfo, SpaceList
+from memory_vault.models.db import execute_query, fetch_all, fetch_one
 
 router = APIRouter(prefix="/api", tags=["spaces"], dependencies=[Depends(require_token)])
 

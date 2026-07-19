@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from src.api.deps import require_token
-from src.api.schemas import (
+from memory_vault.api.deps import require_token
+from memory_vault.api.schemas import (
     EntityDetail,
     EntityList,
     EntityMention,
@@ -17,7 +17,7 @@ from src.api.schemas import (
     RelationshipList,
     RelationshipRow,
 )
-from src.models.db import fetch_all, fetch_one
+from memory_vault.models.db import fetch_all, fetch_one
 
 router = APIRouter(prefix="/api/graph", tags=["graph"], dependencies=[Depends(require_token)])
 

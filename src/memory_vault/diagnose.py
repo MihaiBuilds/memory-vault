@@ -27,7 +27,7 @@ import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from src.logging_config import get_log_file
+from memory_vault.logging_config import get_log_file
 
 APP_LOG_TAIL_LINES = 1000
 DB_LOG_TAIL_LINES = 500

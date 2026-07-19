@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.models.db import execute_query, fetch_one
+from memory_vault.models.db import execute_query, fetch_one
 
 pytestmark = pytest.mark.asyncio
 
@@ -368,7 +368,7 @@ class TestExtractionOnIngest:
         the ingest complete successfully with the chunk committed and graph
         tables empty for that chunk.
         """
-        from src.services import ingestion
+        from memory_vault.services import ingestion
 
         def broken_extract(text):
             raise RuntimeError("simulated spaCy failure")

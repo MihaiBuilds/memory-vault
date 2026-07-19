@@ -20,14 +20,11 @@ WORKDIR /app
 # CPU-only PyTorch (sentence-transformers needs torch for embeddings)
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
 COPY src/ ./src/
-COPY migrations/ ./migrations/
-
-ENV PYTHONPATH=/app
 
 RUN pip install --no-cache-dir . \
     && python -m spacy download en_core_web_sm
 
 # stdio MCP server — no port exposed, no healthcheck (stdio has no HTTP surface)
-ENTRYPOINT ["python", "-m", "src.mcp"]
+ENTRYPOINT ["python", "-m", "memory_vault.mcp"]

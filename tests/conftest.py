@@ -9,15 +9,15 @@ Each test function truncates the mutable tables (`chunks`, `api_tokens`,
 `query_log`) so tests start from a clean slate without paying the cost of
 re-running migrations.
 
-Environment variables are set *before* any `src.*` module is imported so
-`src.config.settings` picks up the test DB.
+Environment variables are set *before* any `memory_vault.*` module is imported so
+`memory_vault.config.settings` picks up the test DB.
 """
 
 from __future__ import annotations
 
 import os
 
-# Must be set before importing anything from src.* — Settings is frozen
+# Must be set before importing anything from memory_vault.* — Settings is frozen
 # and reads os.environ at import time.
 os.environ.setdefault("DB_HOST", "db")
 os.environ.setdefault("DB_PORT", "5432")
@@ -39,7 +39,7 @@ ADMIN_DSN = (
     f"@{os.environ['DB_HOST']}:{os.environ['DB_PORT']}/postgres"
 )
 TEST_DB_NAME = "memory_vault_test"
-MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
+MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "src" / "memory_vault" / "migrations"
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +94,7 @@ async def _test_database():
     """
     _drop_and_create_db()
 
-    from src.models.db import close_pool, init_pool, run_migrations
+    from memory_vault.models.db import close_pool, init_pool, run_migrations
 
     await init_pool(min_size=1, max_size=5)
     await run_migrations()
@@ -108,7 +108,7 @@ async def _test_database():
 @pytest_asyncio.fixture(autouse=True)
 async def _clean_tables(_test_database):
     """Truncate mutable tables before every test."""
-    from src.models.db import execute_query
+    from memory_vault.models.db import execute_query
 
     await execute_query(
         "TRUNCATE chunks, api_tokens, query_log, "
@@ -131,7 +131,7 @@ async def app():
     open/close a pool — the session-scoped `_test_database` fixture owns
     the pool for the entire test run.
     """
-    from src.api.app import create_app
+    from memory_vault.api.app import create_app
 
     application = create_app()
     yield application
@@ -150,7 +150,7 @@ async def client(app):
 @pytest_asyncio.fixture
 async def auth_token():
     """Create a real API token and return its plaintext."""
-    from src.api.deps import create_token
+    from memory_vault.api.deps import create_token
 
     return await create_token("test-suite")
 
