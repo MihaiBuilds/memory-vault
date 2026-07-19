@@ -12,9 +12,30 @@ permissions:
   packages: write    # push to ghcr.io
 
 jobs:
+  version-guard:
+    name: Assert pyproject.toml version matches tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Compare pyproject.toml version to tag
+        run: |
+          # Fail early if the package version in pyproject.toml doesn't match the
+          # tag we're releasing. Prevents shipping a Docker image or GitHub release
+          # whose reported package version drifts from the git tag.
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PYPROJECT_VERSION=$(grep -E '^version[[:space:]]*=[[:space:]]*"' pyproject.toml | head -1 | sed -E 's/^version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/')
+          echo "Tag version:       $TAG_VERSION"
+          echo "pyproject version: $PYPROJECT_VERSION"
+          if [ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]; then
+            echo "::error::pyproject.toml version ($PYPROJECT_VERSION) does not match tag ($TAG_VERSION). Bump pyproject.toml before tagging."
+            exit 1
+          fi
+
   docker:
     name: Build + push ${{ matrix.image }} (multi-arch) to ghcr.io
     runs-on: ubuntu-latest
+    needs: version-guard
     strategy:
       fail-fast: false
       matrix:

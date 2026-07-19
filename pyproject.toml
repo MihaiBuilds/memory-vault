@@ -1,6 +1,6 @@
 [project]
 name = "memory-vault"
-version = "0.4.0"
+version = "1.0.6"
 description = "Local-first AI memory system with hybrid search — PostgreSQL + pgvector"
 readme = "README.md"
 license = "MIT"
