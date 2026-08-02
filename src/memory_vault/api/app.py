@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from memory_vault import __version__
 from memory_vault.api.deps import RateLimitMiddleware
 from memory_vault.api.middleware import RequestIDMiddleware
 from memory_vault.api.routers import chat, chunks, graph, health, ingest, search, spaces
@@ -46,7 +47,7 @@ def create_app() -> FastAPI:
             "Local-first AI memory system — hybrid search, ingestion, "
             "and management for your personal memory store."
         ),
-        version="0.4.0",
+        version=__version__,
         lifespan=_lifespan,
         docs_url="/docs",
         redoc_url="/redoc",

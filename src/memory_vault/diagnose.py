@@ -95,19 +95,13 @@ def _collect_env() -> dict[str, str]:
 
 
 def _read_version() -> str:
-    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
-    if not pyproject.exists():
-        return "unknown"
-    try:
-        for line in pyproject.read_text().splitlines():
-            line = line.strip()
-            if line.startswith("version"):
-                # version = "0.4.0"
-                return line.split("=", 1)[1].strip().strip('"').strip("'")
-    except OSError:
-        # pyproject.toml unreadable — return "unknown" rather than crash diagnostics.
-        pass
-    return "unknown"
+    # Read from installed package metadata rather than the source tree's
+    # pyproject.toml — the src/-layout package doesn't ship pyproject.toml
+    # inside the wheel, so the old path-based lookup returned "unknown" on
+    # every pip-installed deployment.
+    from memory_vault import __version__
+
+    return __version__
 
 
 def _run(cmd: list[str], timeout: float = 10.0) -> tuple[int, str]:
