@@ -32,6 +32,10 @@ async def init_pool(min_size: int = 2, max_size: int = 10) -> AsyncConnectionPoo
         min_size=min_size,
         max_size=max_size,
         open=False,
+        # Validate liveness on checkout. Without this a connection that died
+        # while idle — common when the DB is across a network link — is handed
+        # out and the first query on it fails.
+        check=AsyncConnectionPool.check_connection,
         kwargs={"row_factory": dict_row, "autocommit": False},
     )
     await _pool.open()
