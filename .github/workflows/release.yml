@@ -13,22 +13,43 @@ permissions:
 
 jobs:
   version-guard:
-    name: Assert pyproject.toml version matches tag
+    name: Assert every version surface matches tag
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
-      - name: Compare pyproject.toml version to tag
+      - name: Compare every version surface to the tag
         run: |
-          # Fail early if the package version in pyproject.toml doesn't match the
-          # tag we're releasing. Prevents shipping a Docker image or GitHub release
-          # whose reported package version drifts from the git tag.
+          # Every surface that reports a version must match the git tag we're
+          # releasing. Prevents shipping a Docker image, MCP registry descriptor,
+          # or release asset whose version drifts from the tag.
           TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "Tag version: $TAG_VERSION"
+
+          fail=0
+          check() {
+            local label="$1" value="$2"
+            echo "$label: $value"
+            if [ "$value" != "$TAG_VERSION" ]; then
+              echo "::error::$label ($value) does not match tag ($TAG_VERSION)."
+              fail=1
+            fi
+          }
+
           PYPROJECT_VERSION=$(grep -E '^version[[:space:]]*=[[:space:]]*"' pyproject.toml | head -1 | sed -E 's/^version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/')
-          echo "Tag version:       $TAG_VERSION"
-          echo "pyproject version: $PYPROJECT_VERSION"
-          if [ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]; then
-            echo "::error::pyproject.toml version ($PYPROJECT_VERSION) does not match tag ($TAG_VERSION). Bump pyproject.toml before tagging."
+          check "pyproject.toml"                    "$PYPROJECT_VERSION"
+
+          COMPOSE_APP_TAG=$(grep -E 'image:[[:space:]]+ghcr\.io/mihaibuilds/memory-vault:' docker-compose.yml | head -1 | sed -E 's/.*memory-vault:([^[:space:]]+).*/\1/')
+          check "docker-compose.yml app image tag"  "$COMPOSE_APP_TAG"
+
+          SERVER_JSON_VERSION=$(python -c "import json; print(json.load(open('server.json'))['version'])")
+          check "server.json version"               "$SERVER_JSON_VERSION"
+
+          SERVER_JSON_MCP_TAG=$(python -c "import json; print(json.load(open('server.json'))['packages'][0]['identifier'].rsplit(':', 1)[1])")
+          check "server.json MCP image tag"         "$SERVER_JSON_MCP_TAG"
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::One or more version surfaces drift from the tag. Bump every drifted file before re-tagging."
             exit 1
           fi
 
