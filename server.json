@@ -8,11 +8,11 @@
     "url": "https://github.com/MihaiBuilds/memory-vault",
     "source": "github"
   },
-  "version": "1.0.9",
+  "version": "1.0.10",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/mihaibuilds/memory-vault-mcp:1.0.9",
+      "identifier": "ghcr.io/mihaibuilds/memory-vault-mcp:1.0.10",
       "transport": {
         "type": "stdio"
       },
