@@ -40,7 +40,42 @@ async def init_pool(min_size: int = 2, max_size: int = 10) -> AsyncConnectionPoo
     )
     await _pool.open()
     logger.info("Connection pool opened (min=%d, max=%d)", min_size, max_size)
+
+    await _verify_embedding_dimension()
+
     return _pool
+
+
+async def _verify_embedding_dimension() -> None:
+    """Fail fast if EMBEDDING_DIMENSIONS does not match the schema.
+
+    The `chunks.embedding` column type is `vector(N)`; N is fixed at CREATE
+    TABLE. If `settings.embedding_dimensions` diverges, every INSERT/SELECT of
+    an embedding blows up mid-request. Cheaper for the process to refuse to
+    start than to accept traffic and error on the first embedding.
+
+    Skips silently before migration 001 has ever run (fresh install) — the
+    check has nothing to compare against yet, and run_migrations() is the
+    next natural step in that flow.
+    """
+    schema_dim = await fetch_one(
+        """SELECT a.atttypmod AS dim
+           FROM pg_attribute a
+           JOIN pg_class c ON c.oid = a.attrelid
+           WHERE c.relname = 'chunks' AND a.attname = 'embedding'"""
+    )
+    if schema_dim is None:
+        return  # Pre-migration; nothing to verify yet.
+
+    configured = settings.embedding_dimensions
+    actual = int(schema_dim["dim"])
+    if configured != actual:
+        raise RuntimeError(
+            f"EMBEDDING_DIMENSIONS={configured} does not match the "
+            f"chunks.embedding vector({actual}) column in the connected "
+            f"database. Set EMBEDDING_DIMENSIONS={actual} or point at a "
+            f"database whose schema matches your configured dimension."
+        )
 
 
 async def get_pool() -> AsyncConnectionPool:
