@@ -46,7 +46,11 @@ from memory_vault.models.db import (  # noqa: E402
     init_pool,
 )
 from memory_vault.services.embedding import MODEL_NAME, embed  # noqa: E402
-from memory_vault.services.search import hybrid_search, resolve_space_names  # noqa: E402
+from memory_vault.services.search import (  # noqa: E402
+    hybrid_search,
+    parse_since,
+    resolve_space_names,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -180,7 +184,7 @@ async def recall(
         since_dt = None
         if since:
             try:
-                since_dt = datetime.fromisoformat(since).replace(tzinfo=UTC)
+                since_dt = parse_since(since)
             except ValueError:
                 return _dumps(
                     {"error": f"Invalid date format: {since}. Use ISO format (YYYY-MM-DD)."}

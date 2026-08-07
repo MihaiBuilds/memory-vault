@@ -22,6 +22,24 @@ from memory_vault.services.embedding import _get_model, embed, embed_batch
 
 logger = logging.getLogger(__name__)
 
+
+def parse_since(value: str) -> datetime:
+    """Parse an ISO-8601 timestamp for the `since` search filter.
+
+    Aware inputs (e.g. `2026-01-01T00:00:00-05:00`, `2026-01-01T00:00:00Z`)
+    are converted to UTC — the caller's offset is respected. Naive inputs
+    (e.g. `2026-01-01`, `2026-01-01T00:00:00`) are assumed UTC per the
+    documented API contract and tagged accordingly.
+
+    Raises ValueError on invalid ISO strings — callers wrap it in their
+    preferred error shape (HTTPException for REST, JSON error for MCP).
+    """
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
 _STOP_WORDS = {
     "what",
     "how",
