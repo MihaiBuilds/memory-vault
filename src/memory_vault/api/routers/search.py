@@ -30,7 +30,7 @@ async def search(req: SearchRequest) -> SearchResponse:
 
     results, variations, elapsed_ms = await hybrid_search(
         query_text=req.query,
-        space_ids=space_ids or None,
+        space_ids=space_ids,
         since=since_dt,
         limit=req.limit,
     )
