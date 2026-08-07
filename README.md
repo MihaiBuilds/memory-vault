@@ -1,6 +1,11 @@
 # Memory Vault
 
 [![Tests](https://github.com/MihaiBuilds/memory-vault/actions/workflows/test.yml/badge.svg)](https://github.com/MihaiBuilds/memory-vault/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Latest Release](https://img.shields.io/github/v/release/MihaiBuilds/memory-vault)](https://github.com/MihaiBuilds/memory-vault/releases/latest)
+[![Docker Image](https://ghcr-badge.egpl.dev/mihaibuilds/memory-vault/latest_tag?trim=major&label=docker)](https://github.com/MihaiBuilds/memory-vault/pkgs/container/memory-vault)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 **The memory database for AI applications.** Self-hosted Postgres + pgvector with hybrid search, MCP-native, and a knowledge graph baked in.
 
@@ -20,7 +25,7 @@ Memory Vault is the persistent layer underneath. It stores what you want your AI
 
 **v1.0 — released 2026-05-07.** First stable release of Memory Vault. M1-M7 (hybrid search, Docker, MCP, REST API, dashboard, knowledge graph, local LLM chat) all shipped and stable.
 
-Release notes: [GitHub Releases](https://github.com/MihaiBuilds/memory-vault/releases).
+See [CHANGELOG.md](CHANGELOG.md) for the full per-release history, or [GitHub Releases](https://github.com/MihaiBuilds/memory-vault/releases) for the platform-native view.
 
 Semver from here forward — the public surface (REST API endpoints, MCP tool signatures, DB schema) is stable. Breaking changes only on a major version bump.
 
@@ -541,6 +546,17 @@ A PRO tier for teams and advanced features is planned.
 - **[@rivestack](https://x.com/rivestack)** — Postgres + pgvector tuning tips that landed in v1.0 (`maintenance_work_mem=1GB` for fast HNSW builds). More of his suggestions are on the list.
 - **Beta testers** — the people who cloned, broke, and reported things during M1-M7
 - **The open source giants this is built on** — PostgreSQL, pgvector, sentence-transformers, spaCy, FastAPI, FastMCP, React, Cytoscape.js
+
+---
+
+## Acknowledgments
+
+The [GitHub contributor list](https://github.com/MihaiBuilds/memory-vault/graphs/contributors) credits everyone whose code is in the repo. This section acknowledges reporters and diagnosticians whose insight shaped shipped work but doesn't appear in commit authorship.
+
+- **Leonard Janke (lcjanke2020), working with GPT-5.6-Sol through OpenAI Codex** ([@lcj-codex-coder](https://github.com/lcj-codex-coder)) — 20+ issues reported across the v1.0.7–v1.0.10 window, spanning version-drift, MCP correctness, timezone handling, embedding-dimension validation, and knowledge-graph soft-delete semantics. Peer-tier diagnostics; every report came with a disposable-database reproduction.
+- **[@git-pharos](https://github.com/git-pharos)** — diagnostic bundle in [#74](https://github.com/MihaiBuilds/memory-vault/issues/74) that exposed three underlying issues fixed in v1.0.7.
+
+Security reports and correctness findings are always credited by handle, plus any format the reporter specified — including tooling attribution where requested.
 
 ---
 
