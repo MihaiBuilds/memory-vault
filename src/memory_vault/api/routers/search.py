@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from memory_vault.api.deps import require_token
 from memory_vault.api.schemas import SearchHit, SearchRequest, SearchResponse
-from memory_vault.services.search import hybrid_search, log_query, resolve_space_names
+from memory_vault.services.search import (
+    hybrid_search,
+    log_query,
+    parse_since,
+    resolve_space_names,
+)
 
 router = APIRouter(prefix="/api", tags=["search"], dependencies=[Depends(require_token)])
 
@@ -21,7 +26,7 @@ async def search(req: SearchRequest) -> SearchResponse:
     since_dt: datetime | None = None
     if req.since:
         try:
-            since_dt = datetime.fromisoformat(req.since).replace(tzinfo=UTC)
+            since_dt = parse_since(req.since)
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
