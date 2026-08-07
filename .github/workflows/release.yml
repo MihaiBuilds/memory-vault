@@ -107,6 +107,35 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
+  publish-mcp-registry:
+    name: Publish server.json to MCP Registry
+    runs-on: ubuntu-latest
+    needs: docker
+    # OIDC identifies the workflow as belonging to the MihaiBuilds org, which
+    # is what grants publish rights to the io.github.MihaiBuilds/* namespace.
+    # No stored secret required.
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install mcp-publisher
+        run: |
+          # Always pull the latest release — the registry is in preview and
+          # the CLI is versioned alongside the API. Pinning risks an
+          # "invalid audience" mismatch after a server-side change.
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" \
+            | tar xz mcp-publisher
+
+      - name: Authenticate to MCP Registry via GitHub OIDC
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish server.json
+        # version-guard has already asserted server.json.version matches the
+        # git tag, so no in-workflow rewrite is needed here.
+        run: ./mcp-publisher publish
+
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
