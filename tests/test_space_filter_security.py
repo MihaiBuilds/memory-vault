@@ -117,9 +117,7 @@ class TestSearchUnknownSpaceReturnsEmpty:
             f"got {body['total_results']} results"
         )
 
-    async def test_search_with_no_space_filter_still_finds_content(
-        self, client, auth_headers
-    ):
+    async def test_search_with_no_space_filter_still_finds_content(self, client, auth_headers):
         """Regression guard: fix must not break the no-filter path — omitting
         `spaces` (None) still searches every space as before."""
         r = await client.post(
