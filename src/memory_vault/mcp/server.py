@@ -191,7 +191,7 @@ async def recall(
 
         results, variations, elapsed_ms = await hybrid_search(
             query_text=query,
-            space_ids=space_ids or None,
+            space_ids=space_ids,
             since=since_dt,
             limit=limit,
         )

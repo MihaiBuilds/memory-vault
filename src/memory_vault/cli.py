@@ -172,7 +172,7 @@ async def _cmd_search(query: str, space: str | None, limit: int) -> None:
     space_ids = await resolve_space_names([space] if space else None)
     results, variations, elapsed_ms = await hybrid_search(
         query,
-        space_ids=space_ids or None,
+        space_ids=space_ids if space else None,
         limit=limit,
     )
 

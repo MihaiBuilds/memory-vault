@@ -229,7 +229,7 @@ async def _retrieve_context(
     space_ids = await resolve_space_names(req.spaces) if req.spaces else None
     results, _variations, query_ms = await hybrid_search(
         query_text=req.question,
-        space_ids=space_ids or None,
+        space_ids=space_ids,
         limit=req.limit,
     )
     history, results = _apply_token_budget(req.question, req.history, results)

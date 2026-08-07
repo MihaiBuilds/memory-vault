@@ -254,14 +254,24 @@ def _build_where_clause(
     space_ids: list[int] | None,
     since: datetime | None,
 ) -> tuple[list[str], list[Any]]:
-    """Build shared WHERE clauses for both search arms."""
+    """Build shared WHERE clauses for both search arms.
+
+    space_ids semantics:
+      None → no space filter (search every space)
+      []   → caller asked for specific spaces but none resolved; return zero rows
+             (a hard `false` predicate) rather than silently widening to every space
+      [ids...] → filter to those space IDs
+    """
     where_clauses: list[str] = ["(c.metadata->>'forgotten')::boolean IS NOT TRUE"]
     params: list[Any] = []
 
-    if space_ids:
-        placeholders = ", ".join(["%s"] * len(space_ids))
-        where_clauses.append(f"c.space_id IN ({placeholders})")
-        params.extend(space_ids)
+    if space_ids is not None:
+        if space_ids:
+            placeholders = ", ".join(["%s"] * len(space_ids))
+            where_clauses.append(f"c.space_id IN ({placeholders})")
+            params.extend(space_ids)
+        else:
+            where_clauses.append("false")
 
     if since:
         where_clauses.append("c.created_at >= %s")
