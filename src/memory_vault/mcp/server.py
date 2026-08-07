@@ -46,6 +46,7 @@ from memory_vault.models.db import (  # noqa: E402
     init_pool,
 )
 from memory_vault.services.embedding import MODEL_NAME, embed  # noqa: E402
+from memory_vault.services.ingestion import _run_extraction  # noqa: E402
 from memory_vault.services.search import (  # noqa: E402
     hybrid_search,
     parse_since,
@@ -265,6 +266,14 @@ async def remember(
     if not await _ensure_db():
         return _dumps({"stored": False, "error": "Database offline"})
 
+    # Boundary validation — mirrors IngestTextRequest.text on the REST surface
+    # (min_length=1, max_length=1_000_000). Without these checks the MCP surface
+    # silently accepts empty or unbounded payloads that REST rejects with 422.
+    if not text:
+        return _dumps({"stored": False, "error": "text must not be empty."})
+    if len(text) > 1_000_000:
+        return _dumps({"stored": False, "error": "text exceeds the 1,000,000 character limit."})
+
     try:
         space_row = await fetch_one("SELECT id FROM memory_spaces WHERE name = %s", (space,))
         if not space_row:
@@ -310,6 +319,12 @@ async def remember(
                VALUES (%s, %s, 0, %s, %s, %s::vector, %s, %s, %s::jsonb)""",
             (chunk_id, space_id, speaker, text, str(embedding), f"mcp:{source}", importance, meta),
         )
+
+        # Best-effort graph extraction — mirrors REST/file ingestion. The
+        # helper swallows extraction errors so the chunk stays committed;
+        # skipping it here silently orphaned MCP-stored memories from the
+        # knowledge graph, which is what #100 reported.
+        await _run_extraction(chunk_id, text, space_id)
 
         return _dumps(
             {
