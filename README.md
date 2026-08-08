@@ -5,6 +5,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Latest Release](https://img.shields.io/github/v/release/MihaiBuilds/memory-vault)](https://github.com/MihaiBuilds/memory-vault/releases/latest)
 [![Docker Image](https://ghcr-badge.egpl.dev/mihaibuilds/memory-vault/latest_tag?trim=major&label=docker)](https://github.com/MihaiBuilds/memory-vault/pkgs/container/memory-vault)
+[![MCP Registry](https://img.shields.io/badge/MCP_Registry-listed-brightgreen)](https://registry.modelcontextprotocol.io/?q=mihaibuilds)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 **The memory database for AI applications.** Self-hosted Postgres + pgvector with hybrid search, MCP-native, and a knowledge graph baked in.
