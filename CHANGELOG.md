@@ -7,6 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-08-08
+
+Housekeeping release: dependency upgrades + external contributor docs. No code
+authored by MV — every change is either a merged upstream dependency bump or a
+docs contribution. All 5 Python dependabot PRs merged one-by-one with a
+throwaway-container smoke test between each; TS 7 major deferred (upstream
+peer-dep blocker); web-deps group merged as-is.
+
+### Changed
+
+- **`python-multipart` requirement raised to `>=0.0.32`** (was `>=0.0.29`).
+  Ships upstream file-upload parser speedups. Smoke: throwaway-stack file
+  upload via `/api/ingest/file` succeeds end-to-end. ([#94])
+- **`psycopg-pool` requirement raised to `>=3.3.1,<4`** (was `>=3.1,<4`).
+  DB pool client bump. Smoke: 5 rapid-fire ingests + 5 searches exercise
+  pool checkout/return cleanly, no errors in pool logs. ([#96])
+- **`ruff` requirement raised to `>=0.16.1`** (was `>=0.15.20`). Pre-merge
+  verification: `ruff check src/ tests/` + `ruff format --check` both clean
+  on the current codebase with 0 new findings. ([#93])
+- **`fastapi` requirement raised to `>=0.141.1,<1`** (was `>=0.136.1,<1`).
+  5-minor jump; highest Python-side risk in the batch. Smoke: 12/12 endpoint
+  sweep passed — health, spaces list+create, ingest text+file, search,
+  chunks list+get, graph entities+visualize, `/docs`, 401 handling. ([#95])
+- **`sentence-transformers` requirement raised to `>=5.6.1,<6`** (was
+  `>=5.5.0,<6`). Upstream 5.6.1 patches a RoBERTa-family flash-attention
+  quality bug (not relevant to MV — we use `all-MiniLM-L6-v2`). Semantic
+  smoke: two-topic ranking test confirms embedding quality (database-topic
+  query: 0.71 vs 0.06; food-topic query: 0.56 vs -0.06; correct ranking
+  both directions). ([#91])
+- **Web dev-deps refreshed as a group.** `@types/node` 26.1.1→26.1.2,
+  `@types/react` 19.2.17→19.2.18, `@types/react-dom` 19.2.3→19.2.4,
+  `@vitejs/plugin-react` 6.0.4→6.0.5, `eslint` 10.7.0→10.8.0, `globals`
+  17.7.0→17.9.0, `typescript-eslint` 8.65.0→8.66.0, `vite` 8.1.5→8.2.0.
+  Smoke: full docker image build succeeds (both Node/Vite bundle stage
+  and Python image stage). `typescript` intentionally held at 6.x — see
+  Deferred. ([#134])
+
+### Documentation
+
+- **README installation section restructured.** `uv sync` is now the
+  recommended path with an explicit `pip + venv` fallback block for users
+  who don't want `uv`. The missing `python -m spacy download en_core_web_sm`
+  step is now documented in both paths (previously caused a cryptic startup
+  failure on first no-Docker run). ([#136], based on [#47])
+- **MCP setup section expanded.** Global-scope config for Claude Code
+  (`~/.claude/.mcp.json` + `enabledMcpjsonServers`) is now documented
+  alongside project scope. MCP `command` uses `.venv/bin/python` so the
+  config works without needing the venv pre-activated. Docker `DB_HOST`
+  guidance clarified (`127.0.0.1` vs `localhost`). ([#136], based on [#47])
+- **MCP Troubleshooting subsection added.** Covers `ModuleNotFoundError`,
+  spaCy `OSError [E050]`, `claude --debug mcp`, missing
+  `enabledMcpjsonServers`, and the Docker `DB_HOST` refused-connection
+  case. ([#136], based on [#47])
+- **MCP Registry status badge added to README.** ([#135])
+
+### Deferred
+
+- **TypeScript 6.0.3 → 7.0.2** blocked by upstream peer-dep cap.
+  `typescript-eslint@8.66.0` requires `typescript >=4.8.4 <6.1.0`, so TS 7
+  is not installable alongside our current lint tooling. Dependabot will
+  reopen the upgrade PR when `typescript-eslint@9.x` ships with TS 7
+  support. No runtime impact (TS is a build-time tool, and TS 6 vs 7
+  produces functionally-identical JS output for our code). ([#92])
+
+### Contributors
+
+- [@skorten] (Sean Korten) — [#47] (uv setup, global MCP scope,
+  troubleshooting section — adapted and shipped in [#136])
+
 ## [1.0.10] — 2026-08-08
 
 ### Added
@@ -248,7 +317,8 @@ assistants and the apps you build on top of them.
 - 163 tests passing in CI against a real Postgres + pgvector service
   container.
 
-[Unreleased]: https://github.com/MihaiBuilds/memory-vault/compare/v1.0.10...HEAD
+[Unreleased]: https://github.com/MihaiBuilds/memory-vault/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/MihaiBuilds/memory-vault/compare/v1.0.10...v1.1.0
 [1.0.10]: https://github.com/MihaiBuilds/memory-vault/compare/v1.0.9...v1.0.10
 [1.0.9]: https://github.com/MihaiBuilds/memory-vault/compare/v1.0.8...v1.0.9
 [1.0.8]: https://github.com/MihaiBuilds/memory-vault/compare/v1.0.7...v1.0.8
@@ -262,6 +332,7 @@ assistants and the apps you build on top of them.
 [1.0.0]: https://github.com/MihaiBuilds/memory-vault/releases/tag/v1.0.0
 
 [#19]: https://github.com/MihaiBuilds/memory-vault/issues/19
+[#47]: https://github.com/MihaiBuilds/memory-vault/pull/47
 [#74]: https://github.com/MihaiBuilds/memory-vault/issues/74
 [#75]: https://github.com/MihaiBuilds/memory-vault/issues/75
 [#76]: https://github.com/MihaiBuilds/memory-vault/issues/76
@@ -270,6 +341,12 @@ assistants and the apps you build on top of them.
 [#79]: https://github.com/MihaiBuilds/memory-vault/issues/79
 [#80]: https://github.com/MihaiBuilds/memory-vault/issues/80
 [#84]: https://github.com/MihaiBuilds/memory-vault/issues/84
+[#91]: https://github.com/MihaiBuilds/memory-vault/pull/91
+[#92]: https://github.com/MihaiBuilds/memory-vault/pull/92
+[#93]: https://github.com/MihaiBuilds/memory-vault/pull/93
+[#94]: https://github.com/MihaiBuilds/memory-vault/pull/94
+[#95]: https://github.com/MihaiBuilds/memory-vault/pull/95
+[#96]: https://github.com/MihaiBuilds/memory-vault/pull/96
 [#97]: https://github.com/MihaiBuilds/memory-vault/issues/97
 [#100]: https://github.com/MihaiBuilds/memory-vault/issues/100
 [#105]: https://github.com/MihaiBuilds/memory-vault/issues/105
@@ -285,7 +362,11 @@ assistants and the apps you build on top of them.
 [#127]: https://github.com/MihaiBuilds/memory-vault/issues/127
 [#128]: https://github.com/MihaiBuilds/memory-vault/issues/128
 [#129]: https://github.com/MihaiBuilds/memory-vault/issues/129
+[#134]: https://github.com/MihaiBuilds/memory-vault/pull/134
+[#135]: https://github.com/MihaiBuilds/memory-vault/pull/135
+[#136]: https://github.com/MihaiBuilds/memory-vault/pull/136
 
 [@hmodes]: https://github.com/hmodes
 [@git-pharos]: https://github.com/git-pharos
 [@lcj-codex-coder]: https://github.com/lcj-codex-coder
+[@skorten]: https://github.com/skorten
