@@ -69,8 +69,35 @@ If you prefer running without Docker:
 
 - Python 3.11+
 - PostgreSQL 16 with [pgvector](https://github.com/pgvector/pgvector) extension
+- [uv](https://docs.astral.sh/uv/) (recommended) or `pip` + `venv`
 
-### Setup
+### Setup with uv (recommended)
+
+```bash
+# Clone
+git clone https://github.com/MihaiBuilds/memory-vault.git
+cd memory-vault
+
+# Create virtual environment and install dependencies
+uv sync
+
+# Install the spaCy language model
+uv run python -m spacy download en_core_web_sm
+
+# Configure
+cp .env.example .env
+# Edit .env with your PostgreSQL credentials
+
+# Run migrations
+uv run memory-vault migrate
+
+# Verify
+uv run memory-vault status
+```
+
+### Setup with pip + venv (fallback)
+
+If you don't want to install `uv`, plain `pip` + `venv` works too:
 
 ```bash
 # Clone
@@ -84,6 +111,9 @@ source .venv/bin/activate
 # Install dependencies
 pip install -e .
 
+# Install the spaCy language model
+python -m spacy download en_core_web_sm
+
 # Configure
 cp .env.example .env
 # Edit .env with your PostgreSQL credentials
@@ -96,6 +126,8 @@ memory-vault status
 ```
 
 ### Usage
+
+If you set up with `uv`, prefix commands with `uv run` (e.g. `uv run memory-vault search ...`). If you used `pip + venv`, activate the venv first (`source .venv/bin/activate`) and run commands directly:
 
 ```bash
 # Ingest a file
@@ -173,13 +205,15 @@ Memory Vault exposes four tools via the [Model Context Protocol](https://modelco
 
 ### Setup — Claude Code
 
-Add to your project's `.mcp.json`:
+Make sure you've completed the [No-Docker quick start](#no-docker-quick-start) above (uv sync or pip install, plus the spaCy model download) so the `memory_vault` package is installed.
+
+**Project scope** — add to your project's `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "memory-vault": {
-      "command": "python",
+      "command": "/path/to/memory-vault/.venv/bin/python",
       "args": ["-m", "memory_vault.mcp"],
       "env": {
         "DB_HOST": "localhost",
@@ -193,19 +227,29 @@ Add to your project's `.mcp.json`:
 }
 ```
 
+**Global scope** — to make memory-vault available in every Claude Code session, add the same server block to `~/.claude/.mcp.json`, then add `memory-vault` to `enabledMcpjsonServers` in `~/.claude/settings.json`:
+
+```json
+{
+  "enabledMcpjsonServers": ["memory-vault"]
+}
+```
+
+Verify with `claude mcp list` — `memory-vault` should show `connected`.
+
 ### Setup — Claude Desktop
 
-Add the same config to Claude Desktop's settings (`Settings → Developer → Edit Config`). The server runs over stdio — no HTTP, no ports to expose.
+Add the same server block to Claude Desktop's config (`Settings → Developer → Edit Config`), then restart Claude Desktop.
 
 ### Docker Users
 
-If you're running Memory Vault via Docker, point `DB_HOST` at the Docker host:
+If you're running Memory Vault via Docker, use `DB_HOST: "127.0.0.1"` and make sure port 5432 is exposed in your `docker-compose.yml`:
 
 ```json
 {
   "mcpServers": {
     "memory-vault": {
-      "command": "python",
+      "command": "/path/to/memory-vault/.venv/bin/python",
       "args": ["-m", "memory_vault.mcp"],
       "env": {
         "DB_HOST": "127.0.0.1",
@@ -219,7 +263,7 @@ If you're running Memory Vault via Docker, point `DB_HOST` at the Docker host:
 }
 ```
 
-> The MCP server itself runs on the host (not inside Docker) and connects to the PostgreSQL container. Make sure port 5432 is exposed in your `docker-compose.yml`.
+> The MCP server runs on the host (not inside Docker) and connects to the PostgreSQL container over the exposed port.
 
 ### Verify It Works
 
@@ -230,6 +274,14 @@ Once configured, Claude will have access to the memory tools. Try:
 > "Remember that we chose Redis for the session cache."
 
 > "Recall everything about hybrid search."
+
+### Troubleshooting
+
+- **`ModuleNotFoundError` on startup** — the virtual environment isn't installed; re-run `uv sync` (or `pip install -e .`) in the repo directory.
+- **`OSError: [E050]` on startup** — the spaCy language model isn't installed; re-run `python -m spacy download en_core_web_sm`.
+- **Server shows `failed` in Claude Code** — run `claude --debug mcp` to see the server's error output.
+- **Tools not available in Claude Code despite server connecting** — confirm `memory-vault` is listed in `enabledMcpjsonServers` in `~/.claude/settings.json`.
+- **Connection refused with Docker running** — use `DB_HOST: "127.0.0.1"` instead of `"localhost"`.
 
 ---
 
