@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Any
 
-from memory_vault.models.db import execute_returning, fetch_one
+from memory_vault.models.db import execute_returning, fetch_one, get_pool
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,76 @@ async def get_space_id(name: str) -> int | None:
     """Return the id of an existing space, or None."""
     row = await fetch_one("SELECT id FROM memory_spaces WHERE name = %s", (name,))
     return int(row["id"]) if row else None
+
+
+class ChunkNotFound(LookupError):
+    """No chunk with the given id."""
+
+
+class SpaceNotFound(LookupError):
+    """No space with the given name."""
+
+
+async def move_chunk(chunk_id: str, target_space: str) -> dict[str, Any]:
+    """Move a chunk into `target_space`, keeping its graph entries consistent.
+
+    The target space must already exist: moving is a curation step on stored
+    memories, not a way to bring a space into being, and a typo here should
+    fail rather than scatter memories into a new near-identical space.
+
+    The chunk's embedding is unchanged — only its space changes, so the text
+    is never re-embedded. Its extracted entities are another matter. Entities
+    are per-space, while mentions hang off the chunk, so a chunk that moves
+    without them leaves its entities behind in the space it came from and the
+    graph disagrees with search about where the memory lives. The mentions and
+    relationships are therefore dropped and extraction is re-run against the
+    target space. Entities left with no live mentions fall out of the graph
+    views on their own.
+    """
+    from memory_vault.services.ingestion import _run_extraction
+
+    chunk = await fetch_one(
+        """SELECT c.id, c.content, c.space_id, ms.name AS space_name
+           FROM chunks c JOIN memory_spaces ms ON ms.id = c.space_id
+           WHERE c.id = %s""",
+        (chunk_id,),
+    )
+    if chunk is None:
+        raise ChunkNotFound(f"Chunk not found: {chunk_id}")
+
+    target_id = await get_space_id(target_space)
+    if target_id is None:
+        raise SpaceNotFound(f"Unknown space: {target_space}")
+
+    source_space = str(chunk["space_name"])
+    if int(chunk["space_id"]) == target_id:
+        return {
+            "chunk_id": str(chunk["id"]),
+            "from_space": source_space,
+            "to_space": target_space,
+            "moved": False,
+        }
+
+    pool = await get_pool()
+    async with pool.connection() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "UPDATE chunks SET space_id = %s, updated_at = now() WHERE id = %s",
+                (target_id, chunk_id),
+            )
+            await conn.execute("DELETE FROM entity_mentions WHERE chunk_id = %s", (chunk_id,))
+            await conn.execute("DELETE FROM relationships WHERE chunk_id = %s", (chunk_id,))
+
+    # Outside the transaction: extraction is best-effort and must not undo a
+    # move that has already succeeded.
+    await _run_extraction(str(chunk["id"]), str(chunk["content"]), target_id)
+
+    return {
+        "chunk_id": str(chunk["id"]),
+        "from_space": source_space,
+        "to_space": target_space,
+        "moved": True,
+    }
 
 
 async def ensure_space(name: str) -> int:

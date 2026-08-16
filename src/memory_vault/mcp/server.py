@@ -54,6 +54,11 @@ from memory_vault.services.search import (  # noqa: E402
     parse_since,
     resolve_space_names,
 )
+from memory_vault.services.spaces import (  # noqa: E402
+    ChunkNotFound,
+    SpaceNotFound,
+    move_chunk,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -481,6 +486,60 @@ async def forget(chunk_id: str) -> str:
     except Exception as e:
         logger.exception("forget failed")
         return _dumps({"success": False, "error": str(e)})
+
+
+@mcp.tool()
+async def move_memory(chunk_id: str, target_space: str) -> str:
+    """
+    Move a stored memory into a different space.
+
+    The memory keeps its content and embedding; only the space it belongs to
+    changes. Its knowledge-graph entries are rebuilt in the target space so
+    the graph and search agree about where it lives.
+
+    The target space must already exist — use the dashboard or the API to
+    create one first.
+
+    Args:
+        chunk_id: The UUID of the chunk to move.
+        target_space: Name of the space to move it into.
+    """
+    if not await _ensure_db():
+        return _dumps({"success": False, "error": "Database offline"})
+
+    try:
+        result = await move_chunk(chunk_id, target_space)
+    except ChunkNotFound:
+        return _dumps({"success": False, "error": f"Chunk {chunk_id} not found."})
+    except SpaceNotFound:
+        available = await fetch_all("SELECT name FROM memory_spaces ORDER BY name")
+        names = [r["name"] for r in available]
+        return _dumps(
+            {
+                "success": False,
+                "error": f"Unknown space '{target_space}'. Available: {names}",
+            }
+        )
+    except Exception as e:
+        logger.exception("move_memory failed")
+        return _dumps({"success": False, "error": str(e)})
+
+    if not result["moved"]:
+        return _dumps(
+            {
+                "success": True,
+                **result,
+                "message": f"Memory is already in '{target_space}'.",
+            }
+        )
+
+    return _dumps(
+        {
+            "success": True,
+            **result,
+            "message": f"Memory moved from '{result['from_space']}' to '{target_space}'.",
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

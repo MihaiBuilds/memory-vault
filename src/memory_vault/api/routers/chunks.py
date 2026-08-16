@@ -8,8 +8,15 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from memory_vault.api.deps import require_token
-from memory_vault.api.schemas import ChunkList, ChunkSummary, ForgetResponse
+from memory_vault.api.schemas import (
+    ChunkList,
+    ChunkMoveRequest,
+    ChunkMoveResponse,
+    ChunkSummary,
+    ForgetResponse,
+)
 from memory_vault.models.db import execute_query, fetch_all, fetch_one
+from memory_vault.services.spaces import ChunkNotFound, SpaceNotFound, move_chunk
 
 router = APIRouter(prefix="/api", tags=["chunks"], dependencies=[Depends(require_token)])
 
@@ -145,3 +152,26 @@ async def forget_chunk(chunk_id: str) -> ForgetResponse:
         chunk_id=chunk_id,
         message=f'Memory forgotten: "{preview}"',
     )
+
+
+@router.post("/chunks/{chunk_id}/move", response_model=ChunkMoveResponse)
+async def move_chunk_endpoint(chunk_id: str, req: ChunkMoveRequest) -> ChunkMoveResponse:
+    """Move a chunk into another existing space.
+
+    The content and embedding are untouched; the chunk's knowledge-graph
+    entries are rebuilt in the target space so the graph and search agree
+    about where the memory lives.
+    """
+    try:
+        result = await move_chunk(chunk_id, req.target_space)
+    except ChunkNotFound as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except SpaceNotFound as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+    message = (
+        f"Memory moved from '{result['from_space']}' to '{result['to_space']}'."
+        if result["moved"]
+        else f"Memory is already in '{result['to_space']}'."
+    )
+    return ChunkMoveResponse(success=True, message=message, **result)
