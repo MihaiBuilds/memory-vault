@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 SPACE_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 SPACE_NAME_MAX_LENGTH = 64
 
+# Everything a space name may not contain. Applied before a name is written to
+# a log, so a value that somehow bypassed validation still cannot introduce a
+# line break and forge an entry.
+_LOG_UNSAFE_CHARS = re.compile(r"[^a-z0-9-]")
+
 # Names reserved for internal/future use. `default` is also reserved at the
 # database level (seeded migration) and would 409 on conflict, but listing it
 # here gives a clearer error before we hit the DB.
@@ -66,8 +71,12 @@ def _sanitized_for_log(name: str) -> str:
     name, so in practice this returns it unchanged. It exists so that the
     guarantee holds at the log call itself rather than depending on a check
     several lines earlier that a later edit could reorder.
+
+    Uses an explicit character class rather than `str.isalnum`, which accepts
+    letters from any script and so would pass through more than a space name
+    may contain.
     """
-    return "".join(c for c in name if c.isalnum() or c == "-")[:SPACE_NAME_MAX_LENGTH]
+    return _LOG_UNSAFE_CHARS.sub("", name)[:SPACE_NAME_MAX_LENGTH]
 
 
 async def get_space_id(name: str) -> int | None:

@@ -154,6 +154,23 @@ async def test_sanitized_for_log_strips_line_breaks_and_control_characters():
     assert "\r" not in spaces._sanitized_for_log("evil\r\nINFO fake entry")
     assert len(spaces._sanitized_for_log("x" * 500)) <= spaces.SPACE_NAME_MAX_LENGTH
 
+    # Only the characters a space name may hold survive — letters from other
+    # scripts and uppercase are dropped rather than passed through, which a
+    # str.isalnum() filter would not do.
+    assert spaces._sanitized_for_log("wörk") == "wrk"
+    assert spaces._sanitized_for_log("Кириллица") == ""
+    assert spaces._sanitized_for_log("UPPER") == ""
+    assert spaces._sanitized_for_log("tab\there") == "tabhere"
+
+    # The property that matters for logging: nothing that could break a log
+    # line or forge an entry survives, whatever goes in. The result is not
+    # necessarily a *valid* space name — "-x" stays "-x" — but it is always
+    # free of line breaks and control characters, and bounded in length.
+    for probe in ("evil\nfake", "wörk", "a b c", "x" * 500, "-leading", "---", "\x00\x1b[31m"):
+        cleaned = spaces._sanitized_for_log(probe)
+        assert not any(c in cleaned for c in "\r\n\t\x00\x1b")
+        assert len(cleaned) <= spaces.SPACE_NAME_MAX_LENGTH
+
 
 class TestIngestAutoCreatesSpace:
     """The REST ingest surface creates the space on first write."""
