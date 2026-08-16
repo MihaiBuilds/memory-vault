@@ -16,11 +16,10 @@ dependencies = [
     "sentence-transformers>=5.7.0,<6",
     "numpy>=2.4.6",
     "python-dotenv>=1.2.2",
-    # Pinned <2.0.0 — mcp 2.0.0 (released 2026-07-28) removed mcp.server.fastmcp
-    # which server.py imports. 1.29.0 is the final maintained 1.x release cut
-    # on the same day for exactly this scenario. Migration to the 2.0.0 API
-    # shape is planned for v1.1.
-    "mcp>=1.28.1,<2.0.0",
+    # 2.x replaced mcp.server.fastmcp with mcp.server.mcpserver, so 1.x and 2.x
+    # cannot both be supported by one import. The floor is 2.0.0 for that
+    # reason rather than a feature need.
+    "mcp>=2.0.0,<3.0.0",
     "fastapi>=0.141.1,<1",
     "uvicorn[standard]>=0.52.2,<1",
     "python-multipart>=0.0.32",

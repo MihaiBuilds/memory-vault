@@ -37,7 +37,7 @@ _project_root = str(Path(__file__).parents[2])
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-from mcp.server.fastmcp import FastMCP  # noqa: E402
+from mcp.server.mcpserver import MCPServer  # noqa: E402
 
 from memory_vault.models.db import (  # noqa: E402
     execute_query,
@@ -127,7 +127,7 @@ def _budget_results(results: list[dict], max_tokens: int) -> tuple[list[dict], b
 # MCP server instance
 # ---------------------------------------------------------------------------
 
-mcp = FastMCP("memory-vault")
+mcp = MCPServer("memory-vault")
 
 # ---------------------------------------------------------------------------
 # DB lifecycle
