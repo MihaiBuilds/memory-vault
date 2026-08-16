@@ -309,6 +309,7 @@ async def remember(
                VALUES (%s, %s, 0, %s, %s, %s::vector, %s, %s, %s::jsonb)
                ON CONFLICT (space_id, (metadata->>'content_hash'))
                    WHERE metadata->>'content_hash' IS NOT NULL
+                     AND metadata->>'source_file' IS NULL
                    DO NOTHING
                RETURNING id""",
             (chunk_id, space_id, speaker, text, str(embedding), f"mcp:{source}", importance, meta),
