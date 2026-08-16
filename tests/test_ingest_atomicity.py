@@ -5,7 +5,9 @@ import json
 import pytest
 
 from memory_vault.models.db import execute_query, fetch_all, fetch_one
-from memory_vault.services.ingestion import IngestionPipeline
+from memory_vault.services import ingestion as ing
+
+IngestionPipeline = ing.IngestionPipeline
 
 pytestmark = pytest.mark.asyncio
 
@@ -44,8 +46,6 @@ def _stub_embedding(monkeypatch):
     They exercise transaction and conflict behaviour, not embedding quality,
     and the shared model cannot be driven from several threads safely (#148).
     """
-    import memory_vault.services.ingestion as ing
-
     monkeypatch.setattr(ing, "embed_batch", lambda texts, **kw: [[0.1] * 384 for _ in texts])
 
 
@@ -56,8 +56,6 @@ async def test_failed_file_leaves_no_partial_chunks(tmp_path, monkeypatch):
     a file that failed on its third chunk left the first two behind with
     nothing recording that the file was incomplete.
     """
-    import memory_vault.services.ingestion as ing
-
     space_id = await _space_id()
     path = _write(tmp_path, "partial.md", "# A\n\nfirst\n\n# B\n\nsecond\n\n# C\n\nthird\n")
 
@@ -88,8 +86,6 @@ async def test_failed_file_leaves_no_partial_chunks(tmp_path, monkeypatch):
 
 async def test_retry_after_failure_produces_no_duplicates(tmp_path, monkeypatch):
     """Re-ingesting a file that failed once stores each chunk exactly once."""
-    import memory_vault.services.ingestion as ing
-
     space_id = await _space_id()
     path = _write(tmp_path, "retry.md", "# A\n\nalpha\n\n# B\n\nbeta\n")
 
