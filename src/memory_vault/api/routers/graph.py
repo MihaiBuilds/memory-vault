@@ -53,19 +53,17 @@ async def list_entities(
     # templates ("ms.name = %s", "e.type = %s"). User values go through %s
     # parameters in `params`. No user-controlled SQL fragments.
     # Subquery builds entity + mention_count, then filters by min_mentions.
-    # Mentions on forgotten chunks are excluded so mention_count reflects only
-    # live mentions and entities with zero live mentions drop out via HAVING.
+    # Reading mentions through live_entity_mentions keeps forgotten chunks out
+    # of the count, so entities with zero live mentions drop out via HAVING.
     base_sql = f"""
         SELECT e.id, e.name, e.type, ms.name AS space_name, e.created_at,
-               COUNT(c.id) AS mention_count
+               COUNT(em.id) AS mention_count
         FROM entities e
         JOIN memory_spaces ms ON ms.id = e.space_id
-        LEFT JOIN entity_mentions em ON em.entity_id = e.id
-        LEFT JOIN chunks c ON c.id = em.chunk_id
-            AND (c.metadata->>'forgotten')::boolean IS NOT TRUE
+        LEFT JOIN live_entity_mentions em ON em.entity_id = e.id
         WHERE {where_sql}
         GROUP BY e.id, ms.name
-        HAVING COUNT(c.id) >= %s
+        HAVING COUNT(em.id) >= %s
     """  # nosec B608
 
     count_sql = f"SELECT COUNT(*) AS total FROM ({base_sql}) sub"  # nosec B608
@@ -102,11 +100,8 @@ async def get_entity(entity_id: str) -> EntityDetail:
     entity = await fetch_one(
         """SELECT e.id, e.name, e.type, ms.name AS space_name, e.created_at,
                   (SELECT COUNT(*)
-                     FROM entity_mentions em
-                     JOIN chunks c ON c.id = em.chunk_id
-                    WHERE em.entity_id = e.id
-                      AND (c.metadata->>'forgotten')::boolean IS NOT TRUE)
-                      AS mention_count
+                     FROM live_entity_mentions em
+                    WHERE em.entity_id = e.id) AS mention_count
            FROM entities e
            JOIN memory_spaces ms ON ms.id = e.space_id
            WHERE e.id = %s""",
@@ -118,35 +113,29 @@ async def get_entity(entity_id: str) -> EntityDetail:
             detail=f"Entity not found: {entity_id}",
         )
 
-    # All live mentions with a short chunk preview, newest first. Forgotten
-    # chunks are excluded so their preview text never surfaces here.
+    # All live mentions with a short chunk preview, newest first. The view
+    # keeps forgotten chunks out, so their preview text never surfaces here.
     mention_rows = await fetch_all(
         """SELECT em.chunk_id, em.start_offset, em.end_offset,
                   LEFT(c.content, %s) AS chunk_preview
-           FROM entity_mentions em
+           FROM live_entity_mentions em
            JOIN chunks c ON c.id = em.chunk_id
            WHERE em.entity_id = %s
-             AND (c.metadata->>'forgotten')::boolean IS NOT TRUE
            ORDER BY em.created_at DESC""",
         (CHUNK_PREVIEW_LEN, entity_id),
     )
 
-    # Related entities via relationships (both directions), aggregated. A
-    # relationship backed by a forgotten chunk drops out; a relationship with
-    # no backing chunk (chunk_id IS NULL, from future manual/LLM tagging) stays.
+    # Related entities via relationships (both directions), aggregated. The
+    # view drops relationships backed by a forgotten chunk while keeping those
+    # with no backing chunk at all.
     related_rows = await fetch_all(
         """SELECT other.id, other.name, other.type, COUNT(*) AS co_mention_count
-           FROM relationships r
+           FROM live_relationships r
            JOIN entities other ON other.id = CASE
                WHEN r.source_entity_id = %s THEN r.target_entity_id
                ELSE r.source_entity_id
            END
            WHERE (r.source_entity_id = %s OR r.target_entity_id = %s)
-             AND NOT EXISTS (
-                 SELECT 1 FROM chunks c
-                 WHERE c.id = r.chunk_id
-                   AND (c.metadata->>'forgotten')::boolean IS TRUE
-             )
            GROUP BY other.id, other.name, other.type
            ORDER BY co_mention_count DESC, other.name ASC""",
         (entity_id, entity_id, entity_id),
@@ -193,16 +182,10 @@ async def list_relationships(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> RelationshipList:
-    # Always exclude relationships backed by forgotten chunks; relationships
-    # with chunk_id IS NULL (future manual/LLM-tagged) have no backing chunk
-    # and stay visible.
-    where: list[str] = [
-        "NOT EXISTS ("
-        "SELECT 1 FROM chunks c "
-        "WHERE c.id = r.chunk_id "
-        "AND (c.metadata->>'forgotten')::boolean IS TRUE"
-        ")"
-    ]
+    # Reading from live_relationships excludes rows backed by a forgotten
+    # chunk, while keeping those with chunk_id IS NULL (future manual or
+    # LLM-tagged links, which have no backing chunk to forget).
+    where: list[str] = []
     params: list = []
 
     if entity_id is not None:
@@ -218,12 +201,12 @@ async def list_relationships(
         )
         params.append(space)
 
-    where_sql = " AND ".join(where)
+    where_sql = " AND ".join(where) if where else "TRUE"
 
     # nosec B608 — `where_sql` is composed from a closed set of literal
     # templates; user values are bound via %s parameters.
     count_row = await fetch_one(
-        f"SELECT COUNT(*) AS total FROM relationships r WHERE {where_sql}",  # nosec B608
+        f"SELECT COUNT(*) AS total FROM live_relationships r WHERE {where_sql}",  # nosec B608
         tuple(params),
     )
     total = int(count_row["total"]) if count_row else 0
@@ -232,7 +215,7 @@ async def list_relationships(
         f"""SELECT r.id, r.source_entity_id, r.target_entity_id, r.type,
                    r.chunk_id, r.created_at,
                    s.name AS source_name, t.name AS target_name
-            FROM relationships r
+            FROM live_relationships r
             JOIN entities s ON s.id = r.source_entity_id
             JOIN entities t ON t.id = r.target_entity_id
             WHERE {where_sql}
@@ -285,19 +268,16 @@ async def visualize(
     # nosec B608 — `where_sql` composed from closed-set literal templates;
     # user values bound via %s parameters.
     # Nodes: pick top `max_nodes` by mention_count, filtered by min_mentions.
-    # Mentions on forgotten chunks are excluded via the LEFT JOIN predicate,
-    # so mention_count reflects only live mentions and nodes with zero live
-    # mentions drop out via HAVING.
+    # Reading mentions through the view keeps forgotten chunks out of the
+    # count, so nodes with zero live mentions drop out via HAVING.
     node_rows = await fetch_all(
-        f"""SELECT e.id, e.name, e.type, COUNT(c.id) AS mention_count
+        f"""SELECT e.id, e.name, e.type, COUNT(em.id) AS mention_count
             FROM entities e
             JOIN memory_spaces ms ON ms.id = e.space_id
-            LEFT JOIN entity_mentions em ON em.entity_id = e.id
-            LEFT JOIN chunks c ON c.id = em.chunk_id
-                AND (c.metadata->>'forgotten')::boolean IS NOT TRUE
+            LEFT JOIN live_entity_mentions em ON em.entity_id = e.id
             WHERE {where_sql}
             GROUP BY e.id
-            HAVING COUNT(c.id) >= %s
+            HAVING COUNT(em.id) >= %s
             ORDER BY mention_count DESC, e.name ASC
             LIMIT %s""",  # nosec B608
         tuple(params + [min_mentions, max_nodes]),
@@ -310,12 +290,10 @@ async def visualize(
                 SELECT e.id
                 FROM entities e
                 JOIN memory_spaces ms ON ms.id = e.space_id
-                LEFT JOIN entity_mentions em ON em.entity_id = e.id
-                LEFT JOIN chunks c ON c.id = em.chunk_id
-                    AND (c.metadata->>'forgotten')::boolean IS NOT TRUE
+                LEFT JOIN live_entity_mentions em ON em.entity_id = e.id
                 WHERE {where_sql}
                 GROUP BY e.id
-                HAVING COUNT(c.id) >= %s
+                HAVING COUNT(em.id) >= %s
             ) sub""",  # nosec B608
         tuple(params + [min_mentions]),
     )
@@ -332,21 +310,17 @@ async def visualize(
         for r in node_rows
     ]
 
-    # Edges: only those connecting two surviving nodes AND backed by a live
-    # chunk (or unbacked — chunk_id IS NULL stays for future manual/LLM tags).
+    # Edges: only those connecting two surviving nodes. The view drops edges
+    # backed by a forgotten chunk and keeps unbacked ones (chunk_id IS NULL,
+    # for future manual or LLM-tagged links).
     edges: list[GraphEdge] = []
     if node_ids:
         edge_rows = await fetch_all(
             """SELECT source_entity_id, target_entity_id, type,
                       COUNT(*) AS weight
-               FROM relationships r
+               FROM live_relationships r
                WHERE source_entity_id = ANY(%s::uuid[])
                  AND target_entity_id = ANY(%s::uuid[])
-                 AND NOT EXISTS (
-                     SELECT 1 FROM chunks c
-                     WHERE c.id = r.chunk_id
-                       AND (c.metadata->>'forgotten')::boolean IS TRUE
-                 )
                GROUP BY source_entity_id, target_entity_id, type
                ORDER BY weight DESC""",
             (node_ids, node_ids),
