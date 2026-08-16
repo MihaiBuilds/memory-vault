@@ -41,6 +41,7 @@ from mcp.server.fastmcp import FastMCP  # noqa: E402
 
 from memory_vault.models.db import (  # noqa: E402
     execute_query,
+    execute_returning,
     fetch_all,
     fetch_one,
     health_check,
@@ -290,36 +291,46 @@ async def remember(
         embedding = await asyncio.to_thread(embed, text)
         content_hash = hashlib.sha256(text.encode()).hexdigest()
 
-        # Check for exact duplicate (same hash in same space)
-        dup = await fetch_one(
-            """SELECT id FROM chunks
-               WHERE space_id = %s
-                 AND metadata->>'content_hash' = %s""",
-            (space_id, content_hash),
-        )
-        if dup:
-            return _dumps(
-                {
-                    "stored": False,
-                    "duplicate": True,
-                    "existing_chunk_id": str(dup["id"]),
-                    "message": "This memory already exists (exact duplicate).",
-                }
-            )
-
         # Classify
         category, importance = _classify_memory(text)
         meta = json.dumps({"category": category, "source": source, "content_hash": content_hash})
 
         chunk_id = str(uuid.uuid4())
 
-        await execute_query(
+        # Insert and detect the duplicate in one statement. A separate
+        # SELECT-then-INSERT left a window where two concurrent calls both saw
+        # no duplicate and both stored the memory (#111); the unique index from
+        # migration 004 plus ON CONFLICT closes it. RETURNING yields no row when
+        # the conflict fires, which is how the duplicate case is recognised.
+        inserted = await execute_returning(
             """INSERT INTO chunks
                    (id, space_id, chunk_index, speaker, content, embedding,
                     source, importance, metadata)
-               VALUES (%s, %s, 0, %s, %s, %s::vector, %s, %s, %s::jsonb)""",
+               VALUES (%s, %s, 0, %s, %s, %s::vector, %s, %s, %s::jsonb)
+               ON CONFLICT (space_id, (metadata->>'content_hash'))
+                   WHERE metadata->>'content_hash' IS NOT NULL
+                   DO NOTHING
+               RETURNING id""",
             (chunk_id, space_id, speaker, text, str(embedding), f"mcp:{source}", importance, meta),
         )
+
+        if inserted is None:
+            # The row already existed, or a concurrent call won the race. Either
+            # way the caller gets the same answer as before: the existing chunk.
+            existing = await fetch_one(
+                """SELECT id FROM chunks
+                   WHERE space_id = %s
+                     AND metadata->>'content_hash' = %s""",
+                (space_id, content_hash),
+            )
+            return _dumps(
+                {
+                    "stored": False,
+                    "duplicate": True,
+                    "existing_chunk_id": str(existing["id"]) if existing else None,
+                    "message": "This memory already exists (exact duplicate).",
+                }
+            )
 
         # Best-effort graph extraction — mirrors REST/file ingestion. The
         # helper swallows extraction errors so the chunk stays committed;
