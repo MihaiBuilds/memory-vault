@@ -144,6 +144,31 @@ async def fetch_one(
         return await cur.fetchone()  # type: ignore[return-value]
 
 
+async def execute_returning(
+    sql: str,
+    params: tuple | dict | None = None,
+) -> dict[str, Any] | None:
+    """Execute a DML statement with RETURNING and commit. Returns the row, or None.
+
+    `fetch_one` leaves the commit to psycopg's context manager, which is fine
+    for reads but leaves a write's durability resting on an implicit detail.
+    This helper commits explicitly and rolls back on error, matching
+    `execute_query`, while still handing back the RETURNING row that
+    distinguishes an insert from an `ON CONFLICT DO NOTHING` no-op.
+    """
+    pool = await get_pool()
+    async with pool.connection() as conn:
+        try:
+            cur = await conn.execute(sql, params)
+            row = await cur.fetchone()
+            await conn.commit()
+            return row  # type: ignore[return-value]
+        except Exception:
+            await conn.rollback()
+            logger.exception("execute_returning failed — SQL: %s", sql)
+            raise
+
+
 async def fetch_all(
     sql: str,
     params: tuple | dict | None = None,
