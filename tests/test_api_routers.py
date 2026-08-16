@@ -33,6 +33,29 @@ class TestHealth:
         assert body["embedding_model"]
         assert body["version"]
 
+    async def test_health_returns_503_when_db_unhealthy(self, client, monkeypatch):
+        """Regression guard for #108.
+
+        With Postgres unreachable, the endpoint must return HTTP 503 so the
+        Docker HEALTHCHECK (which only inspects the response code) marks the
+        container unhealthy. The body still carries embedding_model and
+        version so operators keep debug context.
+        """
+        import memory_vault.api.routers.health as health_module
+
+        async def _fake_health_check():
+            return {"status": "unhealthy", "error": "simulated db outage"}
+
+        monkeypatch.setattr(health_module, "health_check", _fake_health_check)
+
+        r = await client.get("/api/health")
+        assert r.status_code == 503
+        body = r.json()
+        assert body["status"] == "degraded"
+        assert body["database"] == "error"
+        assert body["embedding_model"]
+        assert body["version"]
+
 
 # ---------------------------------------------------------------------------
 # Authentication
