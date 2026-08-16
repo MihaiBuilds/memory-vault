@@ -15,13 +15,15 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
 
+from psycopg import AsyncConnection
+
 from memory_vault.adapters.base import RawChunk, detect_adapter
 from memory_vault.extraction import (
     extract_entities,
     extract_relationships,
     write_graph_for_chunk,
 )
-from memory_vault.models.db import execute_query, fetch_one
+from memory_vault.models.db import execute_query, fetch_one, get_pool
 from memory_vault.services.embedding import embed_batch
 
 logger = logging.getLogger(__name__)
@@ -138,39 +140,76 @@ class IngestionPipeline:
         texts = [c.text for c in raw_chunks]
         embeddings = await asyncio.to_thread(embed_batch, texts)
 
-        # Insert each chunk
-        for chunk, emb in zip(raw_chunks, embeddings, strict=True):
-            await self._insert_chunk(chunk, emb, space_id)
+        # One transaction for the whole file. Committing per chunk left the
+        # earlier chunks behind when a later one failed, and retrying the file
+        # then appended a second copy of everything already stored (#115).
+        pool = await get_pool()
+        inserted: list[tuple[str, str]] = []
+        async with pool.connection() as conn:
+            async with conn.transaction():
+                for chunk, emb in zip(raw_chunks, embeddings, strict=True):
+                    chunk_id = await self._insert_chunk(conn, chunk, emb, space_id)
+                    if chunk_id is not None:
+                        inserted.append((chunk_id, chunk.text))
+
+        self._stats.chunks_created += len(inserted)
+
+        # Extraction runs after the chunks are durable, and deliberately
+        # outside the transaction: it is best-effort, and a failure in it must
+        # not roll back a file that stored correctly.
+        for chunk_id, text in inserted:
+            await _run_extraction(chunk_id, text, space_id)
 
     async def _insert_chunk(
         self,
+        conn: AsyncConnection,
         chunk: RawChunk,
         embedding: list[float],
         space_id: int,
-    ) -> None:
-        chunk_id = str(uuid.uuid4())
-        meta_json = json.dumps(chunk.metadata, default=str)
+    ) -> str | None:
+        """Insert one chunk on the caller's connection.
 
-        await execute_query(
+        Returns the new chunk's id, or None when this chunk of this file was
+        already stored — the retry case, which migration 005 turns into a
+        no-op instead of a duplicate.
+        """
+        chunk_id = str(uuid.uuid4())
+        source_file = chunk.metadata.get("source_file", "")
+        # The identity markers migration 005 indexes. Persisting them is what
+        # lets a retry recognise work it already did; without them every retry
+        # looks like fresh content.
+        metadata = {
+            **chunk.metadata,
+            "content_hash": chunk.content_hash,
+            "source_file": source_file,
+        }
+        meta_json = json.dumps(metadata, default=str)
+
+        cur = await conn.execute(
             """INSERT INTO chunks
                    (id, space_id, content, embedding, source, speaker,
                     metadata, chunk_index, created_at)
-               VALUES (%s, %s, %s, %s::vector, %s, %s, %s::jsonb, %s, COALESCE(%s, now()))""",
+               VALUES (%s, %s, %s, %s::vector, %s, %s, %s::jsonb, %s, COALESCE(%s, now()))
+               ON CONFLICT (space_id, (metadata->>'source_file'), chunk_index,
+                            (metadata->>'content_hash'))
+                   WHERE metadata->>'content_hash' IS NOT NULL
+                     AND metadata->>'source_file' IS NOT NULL
+                   DO NOTHING
+               RETURNING id""",
             (
                 chunk_id,
                 space_id,
                 chunk.text,
                 str(embedding),
-                chunk.metadata.get("source_file", ""),
+                source_file,
                 chunk.speaker,
                 meta_json,
                 chunk.chunk_index,
                 chunk.timestamp,
             ),
         )
-        self._stats.chunks_created += 1
-
-        await _run_extraction(chunk_id, chunk.text, space_id)
+        row = await cur.fetchone()
+        return chunk_id if row else None
 
 
 async def ingest_text(
