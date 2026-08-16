@@ -168,13 +168,19 @@ class TestIngestText:
         assert body["chunk_id"]
         assert body["chunks_created"] == 1
 
-    async def test_ingest_unknown_space_returns_404(self, client, auth_headers):
+    async def test_ingest_invalid_space_name_returns_400(self, client, auth_headers):
+        """An unusable name is refused rather than created.
+
+        Ingesting into a space that does not exist yet now creates it, so the
+        remaining failure case is a name the API would never accept — here an
+        underscore, which the space-name rules exclude.
+        """
         r = await client.post(
             "/api/ingest/text",
             headers=auth_headers,
             json={"text": "hello", "space": "no_such_space"},
         )
-        assert r.status_code == 404
+        assert r.status_code == 400
 
     async def test_ingest_empty_text_rejected(self, client, auth_headers):
         r = await client.post(
@@ -214,11 +220,12 @@ class TestIngestFile:
         assert body["stored"] is True
         assert body["chunks_created"] >= 1
 
-    async def test_upload_to_unknown_space(self, client, auth_headers):
+    async def test_upload_to_invalid_space_name_returns_400(self, client, auth_headers):
+        """Uploads follow the same rule as text ingestion."""
         files = {"file": ("test.txt", io.BytesIO(b"hello"), "text/plain")}
         data = {"space": "no_such_space"}
         r = await client.post("/api/ingest/file", headers=auth_headers, files=files, data=data)
-        assert r.status_code == 404
+        assert r.status_code == 400
 
 
 # ---------------------------------------------------------------------------
