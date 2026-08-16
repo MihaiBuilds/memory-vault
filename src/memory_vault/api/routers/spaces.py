@@ -7,22 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from memory_vault.api.deps import require_token
 from memory_vault.api.schemas import SpaceCreateRequest, SpaceInfo, SpaceList
 from memory_vault.models.db import execute_query, fetch_all, fetch_one
+from memory_vault.services.spaces import RESERVED_SPACE_NAMES
 
 router = APIRouter(prefix="/api", tags=["spaces"], dependencies=[Depends(require_token)])
 
-# Names reserved for internal/future use. `default` is also reserved at the
-# database level (seeded migration) and would 409 on conflict, but listing it
-# here gives a clearer error before we hit the DB.
-RESERVED_SPACE_NAMES: frozenset[str] = frozenset(
-    {
-        "default",
-        "system",
-        "admin",
-        "all",
-        "none",
-        "_internal",
-    }
-)
+__all__ = ["RESERVED_SPACE_NAMES", "router"]
 
 
 @router.get("/spaces", response_model=SpaceList)

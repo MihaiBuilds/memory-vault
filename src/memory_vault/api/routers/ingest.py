@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 
 from memory_vault.api.deps import require_token
 from memory_vault.api.schemas import IngestResponse, IngestTextRequest
-from memory_vault.models.db import fetch_one
 from memory_vault.services.ingestion import IngestionPipeline, ingest_text
+from memory_vault.services.spaces import InvalidSpaceName, ensure_space
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +25,17 @@ _UPLOAD_CHUNK = 1024 * 1024  # 1 MB streaming reads
 
 
 async def _resolve_space_id(name: str) -> int:
-    row = await fetch_one("SELECT id FROM memory_spaces WHERE name = %s", (name,))
-    if not row:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Unknown space: {name}",
-        )
-    return int(row["id"])
+    """Return the space's id, creating it on first write.
+
+    Ingesting into a space that does not exist yet used to 404, which meant a
+    caller had to create the space in a separate request before its first
+    write. The name still has to be one the API would accept from an explicit
+    create, so a typo cannot quietly produce a junk space with any spelling.
+    """
+    try:
+        return await ensure_space(name)
+    except InvalidSpaceName as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post("/ingest/text", response_model=IngestResponse)
