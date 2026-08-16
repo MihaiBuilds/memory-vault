@@ -20,7 +20,6 @@ import pytest
 import memory_vault.cli as cli_module
 import memory_vault.models.db as db_module
 import memory_vault.services.ingestion as ingestion_module
-from memory_vault.services.ingestion import IngestionStats
 
 pytestmark = pytest.mark.asyncio
 
@@ -28,7 +27,7 @@ pytestmark = pytest.mark.asyncio
 class _StubPipeline:
     """Stand-in for IngestionPipeline that returns a fixed IngestionStats."""
 
-    def __init__(self, stats: IngestionStats):
+    def __init__(self, stats: ingestion_module.IngestionStats):
         self._stats = stats
 
     def __call__(self, *args, **kwargs):
@@ -37,11 +36,13 @@ class _StubPipeline:
     def enqueue(self, *args, **kwargs) -> None:
         pass
 
-    async def run_all(self) -> IngestionStats:
+    async def run_all(self) -> ingestion_module.IngestionStats:
         return self._stats
 
 
-async def _install_stubs(monkeypatch, stats: IngestionStats, tmp_path: Path) -> Path:
+async def _install_stubs(
+    monkeypatch, stats: ingestion_module.IngestionStats, tmp_path: Path
+) -> Path:
     """Patch DB helpers and IngestionPipeline so _cmd_ingest never touches Postgres."""
 
     async def _noop_init_pool(*args, **kwargs) -> None:
@@ -67,7 +68,7 @@ async def _install_stubs(monkeypatch, stats: IngestionStats, tmp_path: Path) -> 
 
 async def test_cli_ingest_exits_nonzero_when_any_chunk_fails(monkeypatch, tmp_path, capsys):
     """A pipeline that reports ``failed > 0`` must make _cmd_ingest sys.exit(1)."""
-    stats = IngestionStats(failed=1, errors=["stub.md: adapter rejected the file"])
+    stats = ingestion_module.IngestionStats(failed=1, errors=["stub.md: adapter rejected the file"])
     dummy_file = await _install_stubs(monkeypatch, stats, tmp_path)
 
     with pytest.raises(SystemExit) as exc_info:
@@ -81,7 +82,7 @@ async def test_cli_ingest_exits_nonzero_when_any_chunk_fails(monkeypatch, tmp_pa
 
 async def test_cli_ingest_returns_normally_on_success(monkeypatch, tmp_path, capsys):
     """A pipeline with zero failures must not call sys.exit."""
-    stats = IngestionStats(chunks_created=3, completed=1, failed=0)
+    stats = ingestion_module.IngestionStats(chunks_created=3, completed=1, failed=0)
     dummy_file = await _install_stubs(monkeypatch, stats, tmp_path)
 
     # Should not raise SystemExit.
