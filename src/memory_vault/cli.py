@@ -161,6 +161,10 @@ async def _cmd_ingest(file_path: str, space: str) -> None:
 
     await close_pool()
     print(f"Ingested: {stats.chunks_created} chunks created, {stats.failed} failed")
+    if stats.failed > 0:
+        for err in stats.errors:
+            print(f"  {err}")
+        sys.exit(1)
 
 
 async def _cmd_search(query: str, space: str | None, limit: int) -> None:
