@@ -136,7 +136,7 @@ class IngestionPipeline:
 
         # Batch embed
         texts = [c.text for c in raw_chunks]
-        embeddings = embed_batch(texts)
+        embeddings = await asyncio.to_thread(embed_batch, texts)
 
         # Insert each chunk
         for chunk, emb in zip(raw_chunks, embeddings, strict=True):
@@ -189,7 +189,7 @@ async def ingest_text(
 
     space_id = row["id"]
     chunk_id = str(uuid.uuid4())
-    embedding = embed(text)
+    embedding = await asyncio.to_thread(embed, text)
 
     await execute_query(
         """INSERT INTO chunks (id, space_id, content, embedding, source, speaker, chunk_index)
