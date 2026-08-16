@@ -22,12 +22,20 @@ MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
 
 
 async def init_pool(min_size: int = 2, max_size: int = 10) -> AsyncConnectionPool:
-    """Create and open the async connection pool."""
+    """Create and open the async connection pool.
+
+    On any failure during construction, ``open()``, or the post-open
+    dimension check, the partially-initialized pool is closed on a
+    best-effort basis and ``_pool`` is cleared before re-raising. This
+    keeps the in-process retry path clean: a later ``init_pool()`` call
+    constructs and opens a fresh pool rather than returning the failed
+    one from the module-level cache.
+    """
     global _pool
     if _pool is not None:
         return _pool
 
-    _pool = AsyncConnectionPool(
+    pool = AsyncConnectionPool(
         conninfo=settings.database_url,
         min_size=min_size,
         max_size=max_size,
@@ -38,10 +46,20 @@ async def init_pool(min_size: int = 2, max_size: int = 10) -> AsyncConnectionPoo
         check=AsyncConnectionPool.check_connection,
         kwargs={"row_factory": dict_row, "autocommit": False},
     )
-    await _pool.open()
-    logger.info("Connection pool opened (min=%d, max=%d)", min_size, max_size)
-
-    await _verify_embedding_dimension()
+    try:
+        await pool.open()
+        _pool = pool
+        logger.info("Connection pool opened (min=%d, max=%d)", min_size, max_size)
+        await _verify_embedding_dimension()
+    except Exception:
+        # Best-effort teardown of any resources the pool acquired before failing;
+        # then clear the module cache so the next init_pool() call retries cleanly.
+        try:
+            await pool.close()
+        except Exception:
+            logger.exception("failed to close pool after init failure")
+        _pool = None
+        raise
 
     return _pool
 
