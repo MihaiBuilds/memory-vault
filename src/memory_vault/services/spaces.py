@@ -65,18 +65,22 @@ def validate_space_name(name: str) -> None:
 
 
 def _sanitized_for_log(name: str) -> str:
-    """Return `name` reduced to characters a space name may contain.
+    """Return `name` in a form that is safe to emit in a log line.
 
     Callers reach the log only after validate_space_name has accepted the
     name, so in practice this returns it unchanged. It exists so that the
     guarantee holds at the log call itself rather than depending on a check
     several lines earlier that a later edit could reorder.
 
-    Uses an explicit character class rather than `str.isalnum`, which accepts
-    letters from any script and so would pass through more than a space name
-    may contain.
+    Line breaks are removed explicitly before the character class is applied.
+    The class would drop them anyway, so the output is the same either way,
+    but log forging is what this function exists to prevent and it is worth
+    stating in the code rather than leaving as a consequence of the pattern.
+    An explicit class is used rather than `str.isalnum`, which is true for
+    letters in any script and would pass through more than a name may hold.
     """
-    return _LOG_UNSAFE_CHARS.sub("", name)[:SPACE_NAME_MAX_LENGTH]
+    no_line_breaks = name.replace("\r", "").replace("\n", "")
+    return _LOG_UNSAFE_CHARS.sub("", no_line_breaks)[:SPACE_NAME_MAX_LENGTH]
 
 
 async def get_space_id(name: str) -> int | None:
