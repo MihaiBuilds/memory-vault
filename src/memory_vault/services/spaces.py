@@ -59,6 +59,17 @@ def validate_space_name(name: str) -> None:
         )
 
 
+def _sanitized_for_log(name: str) -> str:
+    """Return `name` reduced to characters a space name may contain.
+
+    Callers reach the log only after validate_space_name has accepted the
+    name, so in practice this returns it unchanged. It exists so that the
+    guarantee holds at the log call itself rather than depending on a check
+    several lines earlier that a later edit could reorder.
+    """
+    return "".join(c for c in name if c.isalnum() or c == "-")[:SPACE_NAME_MAX_LENGTH]
+
+
 async def get_space_id(name: str) -> int | None:
     """Return the id of an existing space, or None."""
     row = await fetch_one("SELECT id FROM memory_spaces WHERE name = %s", (name,))
@@ -86,7 +97,12 @@ async def ensure_space(name: str) -> int:
         (name,),
     )
     if row is not None:
-        logger.info("Created space on first write: %s", name)
+        # Log a value re-derived from the pattern rather than the caller's
+        # string. validate_space_name has already rejected anything carrying a
+        # newline or control character, so this cannot change what is written;
+        # it makes the sanitisation visible at the point of use, to readers and
+        # to static analysis alike.
+        logger.info("Created space on first write: %s", _sanitized_for_log(name))
         return int(row["id"])
 
     # The conflict fired: another caller created it between our read and our

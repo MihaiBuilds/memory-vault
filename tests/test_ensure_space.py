@@ -141,6 +141,20 @@ async def test_ensure_space_resolves_the_seeded_default_space():
     assert space_id > 0
 
 
+async def test_sanitized_for_log_strips_line_breaks_and_control_characters():
+    """Nothing that could forge a log line survives the log-sanitiser.
+
+    Names are validated before they reach the log, so this is a second line
+    of defence rather than the only one — but it is the one that holds if the
+    validation and the logging ever drift apart.
+    """
+    assert spaces._sanitized_for_log("work") == "work"
+    assert spaces._sanitized_for_log("side-projects") == "side-projects"
+    assert "\n" not in spaces._sanitized_for_log("evil\nINFO fake entry")
+    assert "\r" not in spaces._sanitized_for_log("evil\r\nINFO fake entry")
+    assert len(spaces._sanitized_for_log("x" * 500)) <= spaces.SPACE_NAME_MAX_LENGTH
+
+
 class TestIngestAutoCreatesSpace:
     """The REST ingest surface creates the space on first write."""
 
