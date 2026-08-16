@@ -8,6 +8,7 @@ import os
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
+from psycopg.conninfo import make_conninfo
 
 load_dotenv()
 
@@ -36,9 +37,19 @@ class Settings:
 
     @property
     def database_url(self) -> str:
-        return (
-            f"postgresql://{self.db_user}:{self.db_password}"
-            f"@{self.db_host}:{self.db_port}/{self.db_name}"
+        """psycopg conninfo string for the configured database.
+
+        Built with ``psycopg.conninfo.make_conninfo`` so URI-reserved characters
+        in DB_USER or DB_PASSWORD (``/``, ``@``, ``:``, ``#``, etc.) are quoted
+        correctly. The historical name is kept for API compatibility even
+        though the result is a keyword=value conninfo string, not a URI.
+        """
+        return make_conninfo(
+            host=self.db_host,
+            port=self.db_port,
+            dbname=self.db_name,
+            user=self.db_user,
+            password=self.db_password,
         )
 
 
