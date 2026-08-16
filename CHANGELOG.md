@@ -7,6 +7,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-08-17
+
+Correctness release. Nine bugs fixed, two features added, and the MCP SDK
+migrated to 2.x. Most of the bugs are concurrency or failure-path defects that
+only show up under load or once something else has already gone wrong: a
+memory stored twice, a retry that duplicated a file, a connection pool that
+never recovered, a process that aborted outright.
+
+Four migrations ship here (004–007). They apply automatically on start.
+Existing rows are not rewritten and no backfill runs, so upgrading does not
+touch data already stored.
+
+### Fixed
+
+- **Concurrent `remember` calls no longer store the same memory twice.** The
+  duplicate check and the insert were separate statements with nothing holding
+  a lock between them, so two simultaneous calls could both pass the check and
+  both commit. A unique index now backs the guarantee and the insert resolves
+  the conflict itself. Migration 004 collapses duplicates left behind by the
+  race before creating the index, so a database that already hit the bug still
+  upgrades. ([#111])
+- **A failed file ingestion no longer leaves partial chunks behind, and
+  retrying no longer duplicates them.** Each chunk was committed on its own, so
+  a failure part-way through left the earlier chunks stored with nothing
+  recording that the file was incomplete. A file's chunks now share one
+  transaction, and migration 005 gives each chunk an identity so re-ingesting
+  the same file is a no-op rather than a second copy. A document that
+  legitimately repeats a passage still stores both copies. ([#115])
+- **Concurrent embedding calls no longer abort the process.** The embedding
+  model is a single shared object whose forward pass is not safe to run from
+  several threads at once, so two simultaneous requests could kill the process
+  rather than raise an error. Embedding is now serialised, and the lazy model
+  load no longer races. ([#148])
+- **A connection pool that fails to open is no longer cached.** If the database
+  was not accepting connections at start-up, the failed pool was stored and
+  handed to every later caller, so the process never recovered even once the
+  database came back. ([#117])
+- **Database credentials containing URI-reserved characters now work.** A
+  password containing `/`, `@`, `:` or `#` broke connection-string parsing.
+  Connection parameters are now assembled by the driver instead of being
+  interpolated into a URI. ([#113])
+- **`/api/health` returns 503 when the database is unreachable.** It returned
+  200 with a `degraded` body, and the Docker healthcheck only inspects the
+  status code — so a container whose database had gone away still reported
+  itself healthy. The body keeps its shape for operators reading it directly.
+  ([#108])
+- **Embedding no longer blocks the event loop.** Inference ran synchronously
+  inside async request handlers, so one embedding call stalled every other
+  request in flight. Four call sites now run it in a worker thread. ([#116])
+- **`memory-vault ingest` exits non-zero when any file fails.** It printed the
+  failure count and exited 0, so scripts and CI treated a failed ingestion as a
+  success. The individual errors are now printed as well. ([#104])
+- **Streamed answers are no longer discarded when a `</think>` tag is split
+  across chunks.** Inside a thinking block the parser cleared its whole buffer
+  whenever it did not find a complete closing tag, throwing away a trailing
+  fragment that the next chunk would have completed — and the answer with it.
+  The same fix covers a second case where a response ending in a `<` character
+  was truncated. ([#98])
+
+### Added
+
+- **Spaces are created on first write.** Ingesting into a space that did not
+  exist yet returned 404, so a space had to be created in a separate request
+  before anything could be stored in it. `POST /api/ingest/text` and
+  `POST /api/ingest/file` now create it. The name still has to be one the API
+  would accept from an explicit create, so a typo fails rather than quietly
+  producing a near-identical space. The MCP `remember` tool deliberately still
+  refuses unknown spaces and lists the ones that exist. ([#153])
+- **Memories can be moved between spaces.** `move_memory` on the MCP surface
+  and `POST /api/chunks/{id}/move` change a memory's space without re-embedding
+  it, and rebuild its knowledge-graph entries in the target space so the graph
+  and search agree about where it lives. The target space must already exist.
+  ([#154])
+
+### Changed
+
+- **The MCP SDK is now 2.x** (`mcp>=2.0.0,<3.0.0`). 2.0.0 removed
+  `mcp.server.fastmcp`, which is why the SDK had been pinned below it; the
+  class moved to `mcp.server.mcpserver` and was renamed. No behaviour change —
+  the server exposes the same tools over the same transport. ([#141])
+- **Knowledge-graph queries read through database views.** Excluding forgotten
+  memories was restated by hand in every graph query, which worked but left the
+  next one a missed clause away from surfacing them. Migration 007 states the
+  rule once. No behaviour change. ([#155])
+
+### Contributors
+
+- [@lcj-codex-coder] (Leonard Janke — lcjanke2020, working with GPT-5.6-Sol
+  through OpenAI Codex) — reported [#98], [#104], [#108], [#111], [#113],
+  [#115], [#116], [#117]
+- [@gatesl] — [#52] (the space-lifecycle design that `_ensure_space` and
+  `move_memory` are built on)
+
 ## [1.1.1] — 2026-08-16
 
 Small patch release: three dependency bumps merged one-by-one with per-PR
@@ -352,6 +445,7 @@ assistants and the apps you build on top of them.
 
 [#19]: https://github.com/MihaiBuilds/memory-vault/issues/19
 [#47]: https://github.com/MihaiBuilds/memory-vault/pull/47
+[#52]: https://github.com/MihaiBuilds/memory-vault/pull/52
 [#74]: https://github.com/MihaiBuilds/memory-vault/issues/74
 [#75]: https://github.com/MihaiBuilds/memory-vault/issues/75
 [#76]: https://github.com/MihaiBuilds/memory-vault/issues/76
@@ -367,10 +461,18 @@ assistants and the apps you build on top of them.
 [#95]: https://github.com/MihaiBuilds/memory-vault/pull/95
 [#96]: https://github.com/MihaiBuilds/memory-vault/pull/96
 [#97]: https://github.com/MihaiBuilds/memory-vault/issues/97
+[#98]: https://github.com/MihaiBuilds/memory-vault/issues/98
 [#100]: https://github.com/MihaiBuilds/memory-vault/issues/100
+[#104]: https://github.com/MihaiBuilds/memory-vault/issues/104
 [#105]: https://github.com/MihaiBuilds/memory-vault/issues/105
+[#108]: https://github.com/MihaiBuilds/memory-vault/issues/108
 [#109]: https://github.com/MihaiBuilds/memory-vault/issues/109
+[#111]: https://github.com/MihaiBuilds/memory-vault/issues/111
+[#113]: https://github.com/MihaiBuilds/memory-vault/issues/113
 [#114]: https://github.com/MihaiBuilds/memory-vault/issues/114
+[#115]: https://github.com/MihaiBuilds/memory-vault/issues/115
+[#116]: https://github.com/MihaiBuilds/memory-vault/issues/116
+[#117]: https://github.com/MihaiBuilds/memory-vault/issues/117
 [#118]: https://github.com/MihaiBuilds/memory-vault/issues/118
 [#120]: https://github.com/MihaiBuilds/memory-vault/issues/120
 [#122]: https://github.com/MihaiBuilds/memory-vault/issues/122
@@ -387,8 +489,14 @@ assistants and the apps you build on top of them.
 [#138]: https://github.com/MihaiBuilds/memory-vault/pull/138
 [#139]: https://github.com/MihaiBuilds/memory-vault/pull/139
 [#140]: https://github.com/MihaiBuilds/memory-vault/pull/140
+[#141]: https://github.com/MihaiBuilds/memory-vault/pull/141
+[#148]: https://github.com/MihaiBuilds/memory-vault/issues/148
+[#153]: https://github.com/MihaiBuilds/memory-vault/pull/153
+[#154]: https://github.com/MihaiBuilds/memory-vault/pull/154
+[#155]: https://github.com/MihaiBuilds/memory-vault/pull/155
 
 [@hmodes]: https://github.com/hmodes
 [@git-pharos]: https://github.com/git-pharos
 [@lcj-codex-coder]: https://github.com/lcj-codex-coder
+[@gatesl]: https://github.com/gatesl
 [@skorten]: https://github.com/skorten
