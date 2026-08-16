@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-08-16
+
+Small patch release: three dependency bumps merged one-by-one with per-PR
+throwaway-stack smoke tests. No code authored by MV. No behavior changes to the
+runtime, no schema changes, no migrations. Safe upgrade.
+
+### Changed
+
+- **`vite` bumped to `^8.2.1`** (was `^8.2.0`) in the web dev-deps group. Docker
+  build smoke passed (Node/Vite bundle stage + Python image stage). ([#138])
+- **`uvicorn[standard]` requirement raised to `>=0.52.2,<1`** (was `>=0.51.0,<1`).
+  Resolved to 0.52.3 in-container. ASGI server smoke: throwaway stack boots
+  cleanly, `/api/health` responds. ([#140])
+- **`sentence-transformers` requirement raised to `>=5.7.0,<6`** (was
+  `>=5.6.1,<6`). Semantic-search smoke: two-topic ranking test returns
+  byte-identical similarity scores to v1.1.0 — no embedding drift, users don't
+  need to re-embed. ([#139])
+
 ## [1.1.0] — 2026-08-08
 
 Housekeeping release: dependency upgrades + external contributor docs. No code
@@ -317,7 +335,8 @@ assistants and the apps you build on top of them.
 - 163 tests passing in CI against a real Postgres + pgvector service
   container.
 
-[Unreleased]: https://github.com/MihaiBuilds/memory-vault/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/MihaiBuilds/memory-vault/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/MihaiBuilds/memory-vault/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/MihaiBuilds/memory-vault/compare/v1.0.10...v1.1.0
 [1.0.10]: https://github.com/MihaiBuilds/memory-vault/compare/v1.0.9...v1.0.10
 [1.0.9]: https://github.com/MihaiBuilds/memory-vault/compare/v1.0.8...v1.0.9
@@ -365,6 +384,9 @@ assistants and the apps you build on top of them.
 [#134]: https://github.com/MihaiBuilds/memory-vault/pull/134
 [#135]: https://github.com/MihaiBuilds/memory-vault/pull/135
 [#136]: https://github.com/MihaiBuilds/memory-vault/pull/136
+[#138]: https://github.com/MihaiBuilds/memory-vault/pull/138
+[#139]: https://github.com/MihaiBuilds/memory-vault/pull/139
+[#140]: https://github.com/MihaiBuilds/memory-vault/pull/140
 
 [@hmodes]: https://github.com/hmodes
 [@git-pharos]: https://github.com/git-pharos
