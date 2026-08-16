@@ -22,7 +22,7 @@ def test_parallel_encode_calls_do_not_crash():
     threads = 8
     start = threading.Barrier(threads)
     results: list[list[float]] = []
-    errors: list[BaseException] = []
+    errors: list[Exception] = []
     lock = threading.Lock()
 
     def worker(n: int) -> None:
@@ -31,7 +31,7 @@ def test_parallel_encode_calls_do_not_crash():
             vector = embedding.embed(f"concurrent embedding call number {n}")
             with lock:
                 results.append(vector)
-        except BaseException as exc:  # noqa: BLE001 - recorded and re-raised below
+        except Exception as exc:
             with lock:
                 errors.append(exc)
 
@@ -56,14 +56,14 @@ def test_parallel_batch_and_single_encode_mix():
     embedding._get_model()
 
     start = threading.Barrier(6)
-    errors: list[BaseException] = []
+    errors: list[Exception] = []
     lock = threading.Lock()
 
     def single(n: int) -> None:
         try:
             start.wait(timeout=60)
             embedding.embed(f"single {n}")
-        except BaseException as exc:  # noqa: BLE001
+        except Exception as exc:
             with lock:
                 errors.append(exc)
 
@@ -71,7 +71,7 @@ def test_parallel_batch_and_single_encode_mix():
         try:
             start.wait(timeout=60)
             embedding.embed_batch([f"batch {n} first", f"batch {n} second"])
-        except BaseException as exc:  # noqa: BLE001
+        except Exception as exc:
             with lock:
                 errors.append(exc)
 
