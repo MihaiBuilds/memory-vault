@@ -17,6 +17,7 @@ Resources:
 
 from __future__ import annotations
 
+import asyncio
 import decimal
 import hashlib
 import json
@@ -286,7 +287,7 @@ async def remember(
         space_id = space_row["id"]
 
         # Embed
-        embedding = embed(text)
+        embedding = await asyncio.to_thread(embed, text)
         content_hash = hashlib.sha256(text.encode()).hexdigest()
 
         # Check for exact duplicate (same hash in same space)

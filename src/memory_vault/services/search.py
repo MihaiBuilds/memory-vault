@@ -8,6 +8,7 @@ log_query():      writes to query_log for observability.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -318,7 +319,10 @@ async def hybrid_search(
 
     # Generate variations and embed
     variations = expand_query(query_text) if enrich else [query_text]
-    vectors = embed_batch(variations) if len(variations) > 1 else [embed(variations[0])]
+    if len(variations) > 1:
+        vectors = await asyncio.to_thread(embed_batch, variations)
+    else:
+        vectors = [await asyncio.to_thread(embed, variations[0])]
 
     base_where, base_params = _build_where_clause(space_ids, since)
 
