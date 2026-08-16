@@ -86,6 +86,25 @@ class ForgetResponse(BaseModel):
     message: str
 
 
+class ChunkMoveRequest(BaseModel):
+    target_space: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        examples=["archive"],
+        description="Name of an existing space to move the memory into.",
+    )
+
+
+class ChunkMoveResponse(BaseModel):
+    success: bool
+    chunk_id: str
+    from_space: str
+    to_space: str
+    moved: bool
+    message: str
+
+
 # ---------------------------------------------------------------------------
 # Spaces
 # ---------------------------------------------------------------------------
