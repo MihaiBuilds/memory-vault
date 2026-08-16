@@ -64,6 +64,21 @@ def _estimate_tokens(text: str) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _partial_tag_suffix(text: str, tag: str) -> str:
+    """Return the trailing part of `text` that could begin `tag`.
+
+    A streamed response can split a tag across two chunks, so a buffer ending
+    in "</thi" has to be carried forward rather than dropped: the "nk>" that
+    completes it arrives next. Returns "" when no suffix of `text` is a prefix
+    of `tag`, which is the common case and keeps nothing needlessly.
+    """
+    max_len = min(len(text), len(tag) - 1)
+    for length in range(max_len, 0, -1):
+        if tag.startswith(text[-length:]):
+            return text[-length:]
+    return ""
+
+
 def _strip_thinking(text: str) -> str:
     """Strip chain-of-thought from non-streamed LLM output.
 
@@ -445,12 +460,13 @@ async def _stream_openai_compat(
                 if not in_think:
                     open_idx = buffer.find("<think>")
                     if open_idx == -1:
-                        # Hold back the tail in case it's a partial "<think>"
-                        if "<" in buffer[-7:]:
-                            tail = buffer[-7:]
-                            emit, buffer = buffer[:-7], tail
-                        else:
-                            emit, buffer = buffer, ""
+                        # Hold back only a tail that could begin "<think>".
+                        # The previous check kept up to seven characters
+                        # whenever the tail contained any "<", which delayed
+                        # ordinary text like "a < b" for no reason.
+                        tail = _partial_tag_suffix(buffer, "<think>")
+                        emit = buffer[: len(buffer) - len(tail)] if tail else buffer
+                        buffer = tail
                         if emit:
                             yield emit
                         break
@@ -463,7 +479,13 @@ async def _stream_openai_compat(
                 else:
                     close_idx = buffer.find("</think>")
                     if close_idx == -1:
-                        buffer = ""  # discard thinking content
+                        # Discard the reasoning, but keep any tail that could be
+                        # the start of a "</think>" split across two chunks.
+                        # Clearing the whole buffer here dropped the "</thi" of
+                        # a "</thi" + "nk>ANSWER" pair, so the closing tag was
+                        # never recognised and the answer was filtered away
+                        # along with the reasoning.
+                        buffer = _partial_tag_suffix(buffer, "</think>")
                         break
                     buffer = buffer[close_idx + len("</think>") :].lstrip()
                     in_think = False
