@@ -13,7 +13,7 @@ keywords = ["ai", "memory", "vector-search", "postgresql", "pgvector", "mcp"]
 dependencies = [
     "psycopg[binary]>=3.3.4,<4",
     "psycopg-pool>=3.3.1,<4",
-    "sentence-transformers>=5.6.1,<6",
+    "sentence-transformers>=5.7.0,<6",
     "numpy>=2.4.6",
     "python-dotenv>=1.2.2",
     # Pinned <2.0.0 — mcp 2.0.0 (released 2026-07-28) removed mcp.server.fastmcp
