@@ -24,6 +24,11 @@ os.environ.setdefault("DB_PORT", "5432")
 os.environ["DB_NAME"] = "memory_vault_test"
 os.environ.setdefault("DB_USER", "memory_vault")
 os.environ.setdefault("DB_PASSWORD", "memory_vault")
+# Hermetic model config: tests must not inherit an operator .env that
+# points at a different embedding model/dimension than the migrated
+# test schema (001 creates vector(384)).
+os.environ["EMBEDDING_MODEL"] = "all-MiniLM-L6-v2"
+os.environ["EMBEDDING_DIMENSIONS"] = "384"
 os.environ["API_AUTH_ENABLED"] = "true"
 os.environ["API_RATE_LIMIT_PER_MIN"] = "100000"  # effectively unlimited for tests
 
