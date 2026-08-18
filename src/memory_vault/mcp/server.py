@@ -51,6 +51,7 @@ from memory_vault.services.embedding import MODEL_NAME, embed  # noqa: E402
 from memory_vault.services.ingestion import _run_extraction  # noqa: E402
 from memory_vault.services.search import (  # noqa: E402
     hybrid_search,
+    log_query,
     parse_since,
     resolve_space_names,
 )
@@ -207,6 +208,10 @@ async def recall(
             since=since_dt,
             limit=limit,
         )
+
+        # Observability: memory_status reads queries_24h from query_log,
+        # which nothing on the MCP path fed until now.
+        await log_query(query, space_ids or None, results, elapsed_ms)
 
         formatted = []
         for r in results:
