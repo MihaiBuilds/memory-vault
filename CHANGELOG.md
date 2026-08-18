@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-08-18
+
+Patch release. Two retrieval and observability fixes, both reported and fixed
+by an outside contributor running Memory Vault at scale.
+
+### Fixed
+
+- **Importance and recency boosts no longer bury exact matches.** The boosts
+  were added to the RRF score, but the maximum boost (0.20) was roughly
+  eighteen times the entire spread between a rank-1 and a rank-50 result
+  (~0.011). Relevance was effectively the tie-breaker and importance the
+  primary sort key, so a recent high-importance note could outrank an exact
+  match on an unrelated query. The boosts now scale the retrieval score
+  instead of being added to it: they still order results of comparable
+  relevance, but can no longer invert a clear rank difference. ([#163], [#165])
+- **MCP `recall` now records queries in `query_log`.** The REST search endpoint
+  was the only caller of the query logger, so on an MCP-only deployment
+  `memory_status` and `memory://stats` always reported `queries_24h: 0` and a
+  null average latency however much the vault was used. ([#164])
+
+### Contributors
+
+- [@ghawley365] (Gary Hawley) — reported and fixed [#163] (via [#165]) and
+  [#164]
+
 ## [1.2.0] — 2026-08-17
 
 Correctness release. Nine bugs fixed, two features added, and the MCP SDK
@@ -428,7 +453,9 @@ assistants and the apps you build on top of them.
 - 163 tests passing in CI against a real Postgres + pgvector service
   container.
 
-[Unreleased]: https://github.com/MihaiBuilds/memory-vault/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/MihaiBuilds/memory-vault/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/MihaiBuilds/memory-vault/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/MihaiBuilds/memory-vault/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/MihaiBuilds/memory-vault/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/MihaiBuilds/memory-vault/compare/v1.0.10...v1.1.0
 [1.0.10]: https://github.com/MihaiBuilds/memory-vault/compare/v1.0.9...v1.0.10
@@ -494,9 +521,13 @@ assistants and the apps you build on top of them.
 [#153]: https://github.com/MihaiBuilds/memory-vault/pull/153
 [#154]: https://github.com/MihaiBuilds/memory-vault/pull/154
 [#155]: https://github.com/MihaiBuilds/memory-vault/pull/155
+[#163]: https://github.com/MihaiBuilds/memory-vault/issues/163
+[#164]: https://github.com/MihaiBuilds/memory-vault/pull/164
+[#165]: https://github.com/MihaiBuilds/memory-vault/pull/165
 
 [@hmodes]: https://github.com/hmodes
 [@git-pharos]: https://github.com/git-pharos
 [@lcj-codex-coder]: https://github.com/lcj-codex-coder
 [@gatesl]: https://github.com/gatesl
 [@skorten]: https://github.com/skorten
+[@ghawley365]: https://github.com/ghawley365
