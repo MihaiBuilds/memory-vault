@@ -435,19 +435,26 @@ async def hybrid_search(
         if info["fts_rank"] is not None:
             rrf += _FTS_WEIGHT / (_RRF_K + info["fts_rank"])
 
+        # Importance and recency modulate the retrieval score rather than
+        # adding to it. Additive boosts (max +0.20) dwarfed the RRF rank
+        # signal (rank 1 contributes ~0.016), so any recent high-importance
+        # chunk outscored an exact match with default importance — burying
+        # rank-1 results beyond the visible window. As multipliers (max
+        # 1.2x) they break ties between similarly-relevant chunks but can
+        # never invert a clear retrieval-rank difference.
         row = info["row"]
-        importance = row.get("importance") or 0.5
-        rrf += _IMPORTANCE_WEIGHT * float(importance)
+        importance = float(row.get("importance") or 0.5)
+        boost = 1.0 + _IMPORTANCE_WEIGHT * importance
 
         created = row.get("created_at")
         if created:
             if created.tzinfo is None:
                 created = created.replace(tzinfo=UTC)
             age_days = max((now_utc - created).days, 0)
-            recency_boost = 1.0 / (1.0 + age_days / _RECENCY_HALF_LIFE_DAYS)
-            rrf += _RECENCY_MAX_BOOST * recency_boost
+            recency_factor = 1.0 / (1.0 + age_days / _RECENCY_HALF_LIFE_DAYS)
+            boost += _RECENCY_MAX_BOOST * recency_factor
 
-        scored.append((rrf, cid, info))
+        scored.append((rrf * boost, cid, info))
 
     scored.sort(key=lambda x: x[0], reverse=True)
 
