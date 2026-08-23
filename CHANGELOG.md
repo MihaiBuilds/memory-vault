@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-08-23
+
+Least privilege. The containers no longer run as root, the database role that
+serves requests can no longer change your schema, API tokens can expire, and the
+threat model that describes all of it is now written down.
+
+Nothing here requires action on upgrade. The container hardening applies
+automatically; the database roles and token expiry are opt-in and existing
+deployments keep working unchanged.
+
+### Added
+
+- **A published threat model.** [`docs/threat-model.md`](docs/threat-model.md)
+  sets out what Memory Vault protects, what it assumes about its environment, and
+  what it explicitly does **not** defend against — stolen tokens carry full
+  access, spaces are not a security boundary, content is stored unencrypted, and
+  prompt injection is not filtered. It also covers hardening a deployment that
+  goes beyond a single machine: token hygiene, network scoping, egress policy,
+  TLS termination, and rate limiting. ([#18])
+- **Optional expiry for API tokens.** `memory-vault token create <name>
+  --expires-in-days N`. A token created without an expiry never lapses, so every
+  token issued before this release keeps working. `token list` gains an
+  `EXPIRES` column and marks lapsed tokens. An expired token is reported
+  differently from a revoked one, because an operator debugging a 401 needs to
+  know which.
+- **Least-privilege database roles.** Migration 009 defines
+  `memory_vault_app` (read and write rows), `memory_vault_readonly` (select
+  only), and `memory_vault_migrator` (schema changes). They are group roles with
+  no login of their own, so nothing changes until you adopt them —
+  `DB_MIGRATION_USER` and `DB_MIGRATION_PASSWORD` let migrations run as a role
+  the serving connection does not use. Adoption steps are in the threat model.
+
+### Changed
+
+- **The containers run as a non-root user and need no writable filesystem.**
+  Both images create a system user (uid 10001), and the shipped compose file adds
+  a read-only root filesystem, drops all Linux capabilities, and sets
+  `no-new-privileges`. The embedding model is now baked into the image at build
+  time, which makes that possible and also removes a network round trip from the
+  first query after every start.
+
+### Fixed
+
+- **A read-only container no longer refuses to start when it cannot write its
+  log file.** The existing guard covered creating the log directory, but the
+  directory ships inside the image — so the failure landed on opening the file
+  instead, and a deployment with a read-only root filesystem and no log volume
+  crashed at boot. It now warns and continues logging to stderr.
+- **The threat model's description of the authentication boundary was wrong.**
+  `/docs`, `/redoc` and `/openapi.json` are unauthenticated and exempt from rate
+  limiting, which the document did not say. No memory content is exposed and
+  every documented operation still requires a token, but on a publicly reachable
+  host they describe the API to anonymous visitors. The document now lists them
+  and suggests blocking them at a reverse proxy.
+
+### Security
+
+- **Public artifacts are scanned in CI.** Local git hooks only ever see a command
+  line, so anything written through the GitHub API — a pull request body passed
+  as a file, an issue edited in the browser, release notes — never reached one.
+  A workflow now scans pull request and issue text, release notes, and added
+  lines in a diff. It fails closed: a missing pattern file, an empty one, or a
+  malformed pattern all fail the run.
+
+### Dependencies
+
+- ruff `>=0.16.3`, setuptools `>=84.0.0`, uvicorn `>=0.52.3`, spacy `>=3.8.15`
+  ([#158], [#160], [#169])
+- Eight web dependencies updated as a group, including cytoscape 3.34.1 and
+  vite 8.2.2 ([#170])
+
 ## [1.2.1] — 2026-08-18
 
 Patch release. Two retrieval and observability fixes, both reported and fixed
@@ -453,7 +524,8 @@ assistants and the apps you build on top of them.
 - 163 tests passing in CI against a real Postgres + pgvector service
   container.
 
-[Unreleased]: https://github.com/MihaiBuilds/memory-vault/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/MihaiBuilds/memory-vault/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/MihaiBuilds/memory-vault/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/MihaiBuilds/memory-vault/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/MihaiBuilds/memory-vault/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/MihaiBuilds/memory-vault/compare/v1.1.0...v1.1.1
@@ -470,6 +542,7 @@ assistants and the apps you build on top of them.
 [1.0.1]: https://github.com/MihaiBuilds/memory-vault/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/MihaiBuilds/memory-vault/releases/tag/v1.0.0
 
+[#18]: https://github.com/MihaiBuilds/memory-vault/issues/18
 [#19]: https://github.com/MihaiBuilds/memory-vault/issues/19
 [#47]: https://github.com/MihaiBuilds/memory-vault/pull/47
 [#52]: https://github.com/MihaiBuilds/memory-vault/pull/52
@@ -524,6 +597,10 @@ assistants and the apps you build on top of them.
 [#163]: https://github.com/MihaiBuilds/memory-vault/issues/163
 [#164]: https://github.com/MihaiBuilds/memory-vault/pull/164
 [#165]: https://github.com/MihaiBuilds/memory-vault/pull/165
+[#158]: https://github.com/MihaiBuilds/memory-vault/pull/158
+[#160]: https://github.com/MihaiBuilds/memory-vault/pull/160
+[#169]: https://github.com/MihaiBuilds/memory-vault/pull/169
+[#170]: https://github.com/MihaiBuilds/memory-vault/pull/170
 
 [@hmodes]: https://github.com/hmodes
 [@git-pharos]: https://github.com/git-pharos
