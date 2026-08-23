@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
@@ -98,7 +99,7 @@ async def list_chunks(
 
 
 @router.get("/chunks/{chunk_id}", response_model=ChunkSummary)
-async def get_chunk(chunk_id: str) -> ChunkSummary:
+async def get_chunk(chunk_id: UUID) -> ChunkSummary:
     row = await fetch_one(
         """SELECT c.id, c.content, c.source, c.speaker, c.importance,
                   c.created_at, c.metadata, ms.name AS space
@@ -112,7 +113,7 @@ async def get_chunk(chunk_id: str) -> ChunkSummary:
 
 
 @router.delete("/chunks/{chunk_id}", response_model=ForgetResponse)
-async def forget_chunk(chunk_id: str) -> ForgetResponse:
+async def forget_chunk(chunk_id: UUID) -> ForgetResponse:
     """Soft-delete a chunk (same behavior as the MCP `forget` tool)."""
     row = await fetch_one(
         "SELECT id, content, metadata FROM chunks WHERE id = %s",
@@ -149,13 +150,16 @@ async def forget_chunk(chunk_id: str) -> ForgetResponse:
     preview = row["content"][:80] + ("..." if len(row["content"]) > 80 else "")
     return ForgetResponse(
         success=True,
-        chunk_id=chunk_id,
+        # The path value is a UUID object now that FastAPI validates it. The
+        # response has always carried a string, and changing that would alter
+        # the API for every existing client.
+        chunk_id=str(chunk_id),
         message=f'Memory forgotten: "{preview}"',
     )
 
 
 @router.post("/chunks/{chunk_id}/move", response_model=ChunkMoveResponse)
-async def move_chunk_endpoint(chunk_id: str, req: ChunkMoveRequest) -> ChunkMoveResponse:
+async def move_chunk_endpoint(chunk_id: UUID, req: ChunkMoveRequest) -> ChunkMoveResponse:
     """Move a chunk into another existing space.
 
     The content and embedding are untouched; the chunk's knowledge-graph
@@ -163,7 +167,9 @@ async def move_chunk_endpoint(chunk_id: str, req: ChunkMoveRequest) -> ChunkMove
     about where the memory lives.
     """
     try:
-        result = await move_chunk(chunk_id, req.target_space)
+        # move_chunk takes the id as a string; FastAPI has already proved the
+        # path value is a well-formed UUID by this point.
+        result = await move_chunk(str(chunk_id), req.target_space)
     except ChunkNotFound as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except SpaceNotFound as e:

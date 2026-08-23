@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from memory_vault.api.deps import require_token
@@ -95,7 +97,7 @@ async def list_entities(
 
 
 @router.get("/entities/{entity_id}", response_model=EntityDetail)
-async def get_entity(entity_id: str) -> EntityDetail:
+async def get_entity(entity_id: UUID) -> EntityDetail:
     # mention_count reflects only mentions on live (non-forgotten) chunks.
     entity = await fetch_one(
         """SELECT e.id, e.name, e.type, ms.name AS space_name, e.created_at,
