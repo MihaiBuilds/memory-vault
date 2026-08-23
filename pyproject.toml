@@ -21,10 +21,10 @@ dependencies = [
     # reason rather than a feature need.
     "mcp>=2.0.0,<3.0.0",
     "fastapi>=0.141.1,<1",
-    "uvicorn[standard]>=0.52.2,<1",
+    "uvicorn[standard]>=0.52.3,<1",
     "python-multipart>=0.0.32",
     "pydantic>=2.13.4,<3",
-    "spacy>=3.8.14,<4",
+    "spacy>=3.8.15,<4",
     "structlog>=26.1.0,<27",
 ]
 
