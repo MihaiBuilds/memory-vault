@@ -56,10 +56,20 @@ deciding, often over months.
 
 There are four, and only the first two are enforced by Memory Vault itself.
 
-**1 · Network → REST API.** Every route requires a bearer token except
-`GET /api/health`, which is unauthenticated so container orchestrators can probe
-it without credentials. It returns status, version and the embedding model name —
-no memory content.
+**1 · Network → REST API.** Every route that touches memory requires a bearer
+token. Four paths do not:
+
+- `GET /api/health` — unauthenticated so container orchestrators can probe it
+  without credentials. Returns status, version and the embedding model name.
+- `/docs`, `/redoc`, `/openapi.json` — the interactive API documentation. These
+  describe the API's shape; they expose no memory content, and every operation
+  they document still requires a token to call. They are also exempt from rate
+  limiting.
+
+On a deployment reachable beyond your own machine, the documentation endpoints
+tell an anonymous visitor exactly what the API offers. That is not a
+vulnerability, but it is free reconnaissance — block them at your reverse proxy
+if you would rather not publish it.
 
 **2 · REST API → database.** The application holds one Postgres credential and
 uses it for everything.
@@ -82,7 +92,7 @@ supplies. Memory Vault does not restrict where that points; see
 
 | Attack | Defense |
 | --- | --- |
-| Unauthenticated access to memory | Bearer token required on every route except `/api/health`. Tokens are 32 random bytes from `secrets.token_urlsafe`, stored only as SHA-256 hashes |
+| Unauthenticated access to memory | Bearer token required on every route that reads or writes memory (see the trust boundary above for the four that are open). Tokens are 32 random bytes from `secrets.token_urlsafe`, stored only as SHA-256 hashes, and can be given an expiry |
 | Brute-force token guessing | Token entropy plus a rate limiter (120 req/min per IP, configurable); hash comparison uses `hmac.compare_digest` for constant-time behaviour |
 | Stolen bearer token | Revoke with `memory-vault token revoke <prefix>`; revocation takes effect on the next request. `last_used_at` lets the operator audit suspicious tokens |
 | SQL injection | All raw SQL uses `%s` parameter binding — no f-string substitution of user values. Pydantic validates every input at the API boundary; space names must match `^[a-z0-9][a-z0-9-]*$` |
@@ -184,6 +194,9 @@ following.
   `memory-vault token revoke <prefix>`.
 - `memory-vault token list` shows `last_used_at` — use it to find tokens that can
   be revoked.
+- Give tokens an expiry rather than relying on remembering to revoke them:
+  `memory-vault token create ci --expires-in-days 90`. A token issued without one
+  never lapses.
 
 ### Network scoping
 
@@ -295,7 +308,7 @@ Recorded here rather than left implicit. These are accepted, not hidden.
 | --- | --- |
 | Containers run as root | Closed — non-root (uid 10001), read-only rootfs, all capabilities dropped |
 | One database role for both migrations and runtime | Still the default; opt-in roles available (see above) |
-| API tokens never expire | Open |
+| API tokens never expire | Closed — `memory-vault token create --expires-in-days N`; tokens without an expiry still never lapse |
 | No per-space or per-scope token permissions | Not planned — spaces are not a security boundary |
 | Memory content stored unencrypted | Not planned — disk encryption is the operator's responsibility |
 | `forget` does not reclaim storage | Tracked in issue #74 |

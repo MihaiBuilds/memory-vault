@@ -92,12 +92,25 @@ def configure_logging() -> None:
     root.addHandler(stderr_handler)
 
     if log_file is not None:
-        file_handler = logging.handlers.TimedRotatingFileHandler(
-            log_file,
-            when="midnight",
-            backupCount=7,
-            encoding="utf-8",
-        )
+        try:
+            file_handler = logging.handlers.TimedRotatingFileHandler(
+                log_file,
+                when="midnight",
+                backupCount=7,
+                encoding="utf-8",
+            )
+        except OSError:
+            # The directory exists but the file cannot be opened — a read-only
+            # filesystem with no volume mounted at the log path is the usual
+            # cause. The mkdir above succeeds there because the directory is
+            # baked into the image, so this is the branch that actually catches
+            # it. stderr logging is already attached, and losing the log file is
+            # not a reason to refuse to start.
+            root.warning(
+                "log file %s is not writable; continuing with stderr logging only",
+                log_file,
+            )
+            return
         file_handler.setFormatter(formatter)
         root.addHandler(file_handler)
 
