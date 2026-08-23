@@ -118,7 +118,10 @@ async def ingest_file_endpoint(
 
         try:
             pipeline = IngestionPipeline(max_workers=1)
-            pipeline.enqueue(tmp_path, space_id)
+            # Read from the tempfile, but record the name the user uploaded.
+            # The tempfile is deleted when this request ends, so persisting its
+            # path left every uploaded chunk pointing at something gone.
+            pipeline.enqueue(tmp_path, space_id, source_name=filename)
             stats = await pipeline.run_all()
         except HTTPException:
             raise
