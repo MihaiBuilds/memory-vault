@@ -71,8 +71,22 @@ jobs:
       - name: Download spaCy model
         run: python -m spacy download en_core_web_sm
 
+      # A collection error already fails the run (pytest exits 2), but a run
+      # that collects far fewer tests than expected still passes — a whole
+      # module can stop being collected without anything going red. The floor
+      # turns "quietly ran a fraction of the suite" into a failure. Raise it
+      # when the suite grows; it is a tripwire, not a target.
       - name: Run pytest
         run: pytest -v --tb=short
+
+      - name: Assert the suite did not shrink
+        run: |
+          count=$(pytest --collect-only -q 2>/dev/null | tail -1 | grep -oE '^[0-9]+')
+          echo "collected: ${count:-0} tests (floor: 300)"
+          if [ "${count:-0}" -lt 300 ]; then
+            echo "::error::Collected ${count:-0} tests, below the floor of 300 — a module may have stopped being collected."
+            exit 1
+          fi
 
   web-build:
     name: Web build (vite production bundle)
