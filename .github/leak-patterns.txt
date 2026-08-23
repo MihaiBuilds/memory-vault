@@ -1,0 +1,23 @@
+# Patterns that must never appear in a public artifact.
+#
+# One extended regular expression per line. Blank lines and lines starting with
+# '#' are ignored. Matching is case-insensitive.
+#
+# These are internal working references — private notes, planning shorthand, and
+# infrastructure identifiers. None of them are secrets; the harm is that they are
+# meaningless to a reader and expose process detail that belongs in private notes.
+# Credential scanning is a separate concern handled by GitHub secret scanning.
+#
+# Keep this list short and specific. A pattern that fires on ordinary English
+# trains people to ignore the gate, which is worse than not having one.
+
+# Private note-store references
+chunk[[:space:]]+[a-f0-9]{8}
+memory[[:space:]]+chunk[[:space:]]+[a-f0-9]{8}
+
+# Wiki-style links to private notes: [[some-note-name]]
+\[\[[a-z0-9-]+\]\]
+
+# Absolute paths from a development machine
+/Users/[a-z0-9._-]+/
+/home/[a-z0-9._-]+/Projects/
