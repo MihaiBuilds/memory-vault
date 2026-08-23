@@ -26,6 +26,7 @@ import logging
 import re
 import time
 from collections.abc import AsyncGenerator
+from dataclasses import replace
 
 import httpx
 from fastapi import APIRouter, Depends
@@ -53,6 +54,7 @@ router = APIRouter(prefix="/api", tags=["chat"], dependencies=[Depends(require_t
 # with 4k-8k context. We target ~6000 tokens to leave headroom for the answer.
 _PROMPT_TOKEN_BUDGET = 6000
 _CHARS_PER_TOKEN = 4  # rough estimate, conservative for English
+_TRUNCATION_SUFFIX = "... [truncated]"
 
 
 def _estimate_tokens(text: str) -> int:
@@ -188,6 +190,24 @@ def _apply_token_budget(
 
     while total_tokens() > _PROMPT_TOKEN_BUDGET and len(results) > 1:
         results.pop()  # drop lowest-similarity tail
+
+    # Dropping stops at one result, deliberately — an answer with no context is
+    # worse than a trimmed one. But that last result was then sent whole
+    # however large it was, so a single big memory could exceed the budget
+    # several times over. Trim its content instead of giving up on the cap.
+    if results and total_tokens() > _PROMPT_TOKEN_BUDGET:
+        overshoot = total_tokens() - _PROMPT_TOKEN_BUDGET
+        keep_chars = (
+            len(results[0].content) - (overshoot * _CHARS_PER_TOKEN) - len(_TRUNCATION_SUFFIX)
+        )
+        results[0] = replace(
+            results[0],
+            content=(
+                results[0].content[:keep_chars] + _TRUNCATION_SUFFIX
+                if keep_chars > 0
+                else _TRUNCATION_SUFFIX
+            ),
+        )
 
     return history, results
 
