@@ -72,10 +72,15 @@ except ImportError:
 
 
 def extract_entities(text: str) -> list[Entity]:
-    """Extract entities from a chunk of text.
+    """Extract entities from a chunk of text, one Entity per occurrence.
 
-    Returns a deduplicated list (by case-insensitive name + type) in
-    first-occurrence order. Types: Person, Project, Tool, Concept.
+    Entity *identity* is still case-insensitive name + type — the graph writer
+    upserts on that, so repeated mentions resolve to one node. What is no
+    longer collapsed is the occurrences: each hit keeps its own offsets, so
+    `entity_mentions` records where in the chunk the entity actually appears
+    rather than only where it first appeared.
+
+    Returned in first-occurrence order. Types: Person, Project, Tool, Concept.
     """
     if not _SPACY_READY or not text:
         return []
@@ -98,8 +103,10 @@ def extract_entities(text: str) -> list[Entity]:
             continue
         key = (name.lower(), mapped_type)
         ner_spans.append((ent.start_char, ent.end_char))
-        if key in seen:
-            continue
+        # `seen` still tracks identity so Concept extraction below does not
+        # re-add something already found as a Person or Tool. It no longer
+        # skips the entity itself: every occurrence gets its own offsets, and
+        # the writer upserts them onto one node.
         seen.add(key)
         entities.append(Entity(name=name, type=mapped_type, start=ent.start_char, end=ent.end_char))
 
@@ -117,20 +124,22 @@ def extract_entities(text: str) -> list[Entity]:
             concept_chunks.append((name, np.start_char, np.end_char))
 
     counts = Counter(name.lower() for name, _, _ in concept_chunks)
-    first_seen: dict[str, tuple[str, int, int]] = {}
+
+    # The occurrence threshold decides whether a noun chunk is a Concept at
+    # all; it is a property of the phrase, not of any one hit. So the count
+    # gates admission, and then every occurrence of an admitted phrase is
+    # emitted with its own offsets.
+    ner_names = {name for name, _type in seen}
+
     for name, start, end in concept_chunks:
         key = name.lower()
-        if key not in first_seen:
-            first_seen[key] = (name, start, end)
-
-    for key, count in counts.items():
-        if count < _MIN_CONCEPT_OCCURRENCES:
+        if counts[key] < _MIN_CONCEPT_OCCURRENCES:
             continue
-        concept_key = (key, "Concept")
-        if concept_key in seen:
+        if key in ner_names:
+            # Already recorded under a real type by the NER pass. Adding a
+            # Concept node for the same phrase would split one thing into two
+            # graph nodes.
             continue
-        seen.add(concept_key)
-        name, start, end = first_seen[key]
         entities.append(Entity(name=name, type="Concept", start=start, end=end))
 
     return entities

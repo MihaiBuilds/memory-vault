@@ -46,12 +46,21 @@ def test_ner_label_mapping_unknown_labels_dropped():
     assert types.issubset({"Person", "Project", "Tool", "Concept"})
 
 
-def test_deduplication_within_chunk_keeps_one_entity():
+def test_deduplication_within_chunk_keeps_one_identity():
     text = "Claude helped me. Claude is great. I talked to Claude again."
     entities = extract_entities(text)
     claude_entities = [e for e in entities if e.name.lower() == "claude"]
-    # Case-insensitive dedup: only one Claude, regardless of type variant.
-    assert len(claude_entities) == 1
+
+    # Every occurrence is kept, each with its own offsets, so the graph can
+    # record where the entity actually appears rather than only where it first
+    # appeared. What dedup still guarantees is identity: repeated mentions
+    # resolve to one node, because the writer upserts on
+    # (lower(name), type, space_id).
+    assert len(claude_entities) > 1, "each occurrence should be extracted"
+    identities = {(e.name.lower(), e.type) for e in claude_entities}
+    assert len(identities) == 1, f"Claude should be one identity, got {identities}"
+    starts = {e.start for e in claude_entities}
+    assert len(starts) == len(claude_entities), "occurrences need distinct offsets"
 
 
 def test_concept_requires_min_occurrences():
@@ -83,9 +92,13 @@ def test_concept_first_seen_casing_preserved():
     )
     entities = extract_entities(text)
     concepts = [e for e in entities if e.type == "Concept" and e.name.lower() == "hybrid search"]
-    assert len(concepts) == 1
-    # First-seen lowercase casing is preserved (source text is already lowercase).
-    assert concepts[0].name == "hybrid search"
+
+    # Both occurrences are now recorded — the phrase qualifying as a Concept is
+    # a property of the phrase, so the occurrence count gates admission and
+    # then every hit is emitted with its own offsets.
+    assert len(concepts) > 1, "each occurrence of an admitted Concept should be kept"
+    # Casing comes from the source text at each position, which is lowercase here.
+    assert all(c.name == "hybrid search" for c in concepts)
 
 
 def test_concept_excludes_spans_overlapping_ner():
