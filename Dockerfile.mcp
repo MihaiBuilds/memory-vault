@@ -26,5 +26,20 @@ COPY src/ ./src/
 RUN pip install --no-cache-dir . \
     && python -m spacy download en_core_web_sm
 
+# Model caches must live somewhere the non-root user owns; HF_HOME defaults to
+# /root/.cache, which that user can neither read nor write.
+ENV HF_HOME=/opt/model-cache/huggingface \
+    SENTENCE_TRANSFORMERS_HOME=/opt/model-cache/sentence-transformers
+
+# Bake the embedding model in at build time. An MCP server is launched by a
+# client on demand, so a first-run download would put a network fetch in the
+# path of the user's first recall — and fail outright on a read-only rootfs.
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
+RUN useradd --system --uid 10001 --create-home --home-dir /home/memoryvault memoryvault \
+    && chown -R memoryvault:memoryvault /app /opt/model-cache
+
+USER memoryvault
+
 # stdio MCP server — no port exposed, no healthcheck (stdio has no HTTP surface)
 ENTRYPOINT ["python", "-m", "memory_vault.mcp"]
