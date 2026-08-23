@@ -7,6 +7,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-08-23
+
+Ten bug fixes and one new capability. Most of these are the kind that only
+surface once you have been using Memory Vault for a while: a budget that was
+not really a cap, a chunk limit that was not really a limit, forgotten memories
+that never actually went away.
+
+Nothing here requires action on upgrade.
+
+### Added
+
+- **Forgotten memories can be purged.** `forget` is a soft delete so a memory
+  can be recovered, but nothing ever removed the rows afterwards — and editing a
+  memory means forget plus remember, so a vault that is edited often grew a dead
+  row per edit. `purge_forgotten(older_than_days=30)` over MCP, or
+  `memory-vault purge-forgotten` on the command line, deletes them for good.
+  It is deliberately not automatic: Memory Vault runs no timer, so nothing
+  deletes your memories unless you ask. The default only removes what was
+  forgotten at least a month ago, so purging right after an accidental forget
+  still spares it. ([#74])
+- **`memory_status` reports `forgotten_chunks`.** The number was derivable by
+  subtracting, but naming it is what tells you whether purging is worth doing.
+  ([#74])
+
+### Fixed
+
+- **A single oversized result could blow the token budget.** Both the chat and
+  MCP budget helpers admitted one arbitrarily large result — 2540 tokens against
+  a 200 budget in the reported case, and the caller was not even told it had
+  happened. Keeping at least one result is deliberate, since an answer with no
+  context is worse than one with trimmed context; sending it whole was not. The
+  final result is now trimmed to what is left. ([#99])
+- **`max_words` was not an upper bound.** A sentence longer than the limit had
+  no sentence boundary to split on, so it passed through whole — and because the
+  flush was guarded on the accumulator being non-empty, an oversized *first*
+  sentence escaped even with more text after it. Word splitting is now the
+  floor under everything else. ([#103])
+- **Uploaded files recorded the server's temporary path as their source.** Every
+  chunk from an upload pointed at something like `/tmp/tmpabcd1234.md`, deleted
+  the moment the request ended. Uploads now record the filename you sent — which
+  also repairs re-upload deduplication, since a path that changes every request
+  could never match. ([#101])
+- **Repeated entity occurrences collapsed to one graph mention.** "Alice met
+  Alice" recorded one mention rather than two. Entity identity is still
+  deduplicated — repeated mentions resolve to one node — but each occurrence now
+  keeps its own offsets. Expect mention counts to rise as content is
+  re-ingested. ([#110])
+- **An empty environment variable crashed at start-up.** `os.getenv` falls back
+  to its default only when a key is absent, so `DB_PORT=""` reached `int()` and
+  raised. Config generated from a manifest emits every declared key, empty where
+  it has no value, which made this a first-run failure. Empty now means unset,
+  and a malformed value names the setting instead of failing from inside the
+  standard library. ([#181])
+- **Concurrent creation of the same space returned 500.** Two callers could both
+  see no existing row and both insert; the loser hit the unique constraint. The
+  insert is now authoritative and the loser gets the same 409 as any other
+  duplicate. ([#112])
+- **A malformed UUID in a path returned 500.** `not-a-valid-identifier` reached
+  PostgreSQL and became a server error. Those routes now reject it at the
+  boundary without opening a database connection. ([#102])
+- **Adding a file after a finished batch re-uploaded the completed ones.** The
+  submit loop ran over every file regardless of status, so a file already
+  ingested went again — while the button correctly offered to ingest only the
+  new one. ([#106])
+- **Stopping a chat left the answer marked as streaming.** The input unlocked
+  and the request ended, but the turn kept showing "Thinking…" indefinitely. It
+  now reaches a terminal state while keeping whatever text had arrived. ([#107])
+
+### Contributors
+
+- [@lcj-codex-coder] (Leonard Janke — lcjanke2020, working with GPT-5.6-Sol
+  through OpenAI Codex) — reported [#99], [#101], [#102], [#103], [#106],
+  [#107], [#110], [#112]
+- [@git-pharos] — reported [#74], the unbounded growth that `purge_forgotten`
+  answers
+
 ## [1.3.0] — 2026-08-23
 
 Least privilege. The containers no longer run as root, the database role that
@@ -524,7 +600,8 @@ assistants and the apps you build on top of them.
 - 163 tests passing in CI against a real Postgres + pgvector service
   container.
 
-[Unreleased]: https://github.com/MihaiBuilds/memory-vault/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/MihaiBuilds/memory-vault/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/MihaiBuilds/memory-vault/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/MihaiBuilds/memory-vault/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/MihaiBuilds/memory-vault/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/MihaiBuilds/memory-vault/compare/v1.1.1...v1.2.0
@@ -562,6 +639,15 @@ assistants and the apps you build on top of them.
 [#96]: https://github.com/MihaiBuilds/memory-vault/pull/96
 [#97]: https://github.com/MihaiBuilds/memory-vault/issues/97
 [#98]: https://github.com/MihaiBuilds/memory-vault/issues/98
+[#99]: https://github.com/MihaiBuilds/memory-vault/issues/99
+[#101]: https://github.com/MihaiBuilds/memory-vault/issues/101
+[#102]: https://github.com/MihaiBuilds/memory-vault/issues/102
+[#103]: https://github.com/MihaiBuilds/memory-vault/issues/103
+[#106]: https://github.com/MihaiBuilds/memory-vault/issues/106
+[#107]: https://github.com/MihaiBuilds/memory-vault/issues/107
+[#110]: https://github.com/MihaiBuilds/memory-vault/issues/110
+[#112]: https://github.com/MihaiBuilds/memory-vault/issues/112
+[#181]: https://github.com/MihaiBuilds/memory-vault/issues/181
 [#100]: https://github.com/MihaiBuilds/memory-vault/issues/100
 [#104]: https://github.com/MihaiBuilds/memory-vault/issues/104
 [#105]: https://github.com/MihaiBuilds/memory-vault/issues/105
