@@ -22,6 +22,7 @@ from memory_vault import __version__
 from memory_vault.api.deps import RateLimitMiddleware
 from memory_vault.api.middleware import RequestIDMiddleware
 from memory_vault.api.routers import chat, chunks, graph, health, ingest, search, spaces
+from memory_vault.config import env_int
 from memory_vault.logging_config import configure_logging
 from memory_vault.models.db import close_pool, init_pool
 
@@ -62,7 +63,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    rate_limit = int(os.getenv("API_RATE_LIMIT_PER_MIN", "120"))
+    rate_limit = env_int("API_RATE_LIMIT_PER_MIN", 120)
     app.add_middleware(RateLimitMiddleware, requests_per_minute=rate_limit)
     app.add_middleware(RequestIDMiddleware)
 
