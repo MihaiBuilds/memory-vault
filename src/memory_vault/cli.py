@@ -47,6 +47,19 @@ def main() -> None:
     # migrate
     sub.add_parser("migrate", help="Run database migrations")
 
+    # purge-forgotten
+    p_purge = sub.add_parser(
+        "purge-forgotten",
+        help="Permanently delete memories forgotten more than N days ago",
+    )
+    p_purge.add_argument(
+        "--older-than",
+        type=int,
+        default=30,
+        metavar="DAYS",
+        help="Only purge memories forgotten at least this many days ago (default: 30)",
+    )
+
     # mcp
     sub.add_parser("mcp", help="Start the MCP server (stdio transport)")
 
@@ -101,6 +114,8 @@ def main() -> None:
 
     if args.command == "migrate":
         asyncio.run(_cmd_migrate())
+    elif args.command == "purge-forgotten":
+        asyncio.run(_cmd_purge_forgotten(args.older_than))
     elif args.command == "ingest":
         asyncio.run(_cmd_ingest(args.file, args.space))
     elif args.command == "search":
@@ -131,6 +146,38 @@ def main() -> None:
         from memory_vault.diagnose import cli_diagnose
 
         cli_diagnose(Path(args.out_dir) if args.out_dir else None)
+
+
+async def _cmd_purge_forgotten(older_than_days: int) -> None:
+    """Permanently delete memories forgotten more than `older_than_days` ago.
+
+    Exposed on the CLI as well as over MCP so an operator can schedule it —
+    their cron, their retention policy, their machine. Memory Vault runs no
+    timer of its own; deleting someone's notes should be something they asked
+    for, not something that happens while they are not looking.
+    """
+    import json
+
+    from memory_vault.mcp.server import purge_forgotten
+    from memory_vault.models.db import close_pool, init_pool
+
+    if older_than_days < 0:
+        print("--older-than cannot be negative.")
+        sys.exit(1)
+
+    await init_pool()
+    try:
+        result = json.loads(await purge_forgotten(older_than_days=older_than_days))
+        if not result.get("success"):
+            print(f"Purge failed: {result.get('error', 'unknown error')}")
+            sys.exit(1)
+        print(
+            f"Purged {result['purged']} memory(ies) forgotten more than "
+            f"{older_than_days} day(s) ago. {result['remaining']} forgotten "
+            f"memory(ies) remain."
+        )
+    finally:
+        await close_pool()
 
 
 async def _cmd_migrate() -> None:

@@ -524,6 +524,68 @@ async def forget(chunk_id: str) -> str:
         return _dumps({"success": False, "error": str(e)})
 
 
+# ---------------------------------------------------------------------------
+# Tool: purge_forgotten
+# ---------------------------------------------------------------------------
+
+DEFAULT_PURGE_AGE_DAYS = 30
+
+
+@mcp.tool()
+async def purge_forgotten(older_than_days: int = DEFAULT_PURGE_AGE_DAYS) -> str:
+    """
+    Permanently delete memories that were forgotten a while ago.
+
+    `forget` is a soft delete: the memory stops appearing in search but the row
+    stays, so it can be recovered. Nothing removed it afterwards, so a vault
+    that is edited often accumulated one dead row per edit forever.
+
+    This is the deliberate, irreversible half. It is never automatic — there is
+    no timer that quietly deletes your memories — and it only touches memories
+    already marked forgotten, never active ones.
+
+    Args:
+        older_than_days: Only purge memories forgotten at least this many days
+            ago. The default keeps a month of recovery, so purging right after
+            an accidental forget still spares it. Pass 0 to purge every
+            forgotten memory regardless of age.
+    """
+    if not await _ensure_db():
+        return _dumps({"success": False, "error": "Database offline"})
+
+    if older_than_days < 0:
+        return _dumps({"success": False, "error": "older_than_days cannot be negative."})
+
+    try:
+        # Graph rows clean themselves up: entity_mentions.chunk_id and
+        # relationships.chunk_id are both ON DELETE CASCADE.
+        purged = await execute_query(
+            """DELETE FROM chunks
+               WHERE (metadata->>'forgotten')::boolean IS TRUE
+                 AND (metadata->>'forgotten_at')::timestamptz
+                     <= now() - make_interval(days => %s)""",
+            (older_than_days,),
+        )
+
+        remaining = await fetch_one(
+            """SELECT COUNT(*) AS n FROM chunks
+               WHERE (metadata->>'forgotten')::boolean IS TRUE"""
+        )
+
+        return _dumps(
+            {
+                "success": True,
+                "purged": purged,
+                "remaining": int(remaining["n"]) if remaining else 0,
+                "older_than_days": older_than_days,
+            }
+        )
+
+    except Exception as e:
+        logger.exception("purge_forgotten failed")
+        return _dumps({"success": False, "error": str(e)})
+
+
 @mcp.tool()
 async def move_memory(chunk_id: str, target_space: str) -> str:
     """
@@ -632,6 +694,11 @@ async def memory_status() -> str:
                 "embedding_model": MODEL_NAME,
                 "total_chunks": total_chunks,
                 "active_chunks": active_chunks,
+                # The difference was already derivable, but only by subtracting.
+                # Naming it makes accumulation something an operator can see
+                # rather than compute — and it is what tells them whether
+                # purge_forgotten is worth running.
+                "forgotten_chunks": total_chunks - active_chunks,
                 "chunks_per_space": spaces,
                 "queries_24h": ql["cnt"] if ql else 0,
                 "avg_latency_ms": round(float(ql["avg_lat"]), 1) if ql and ql["avg_lat"] else None,
