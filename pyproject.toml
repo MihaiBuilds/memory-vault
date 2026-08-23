@@ -36,6 +36,19 @@ dev = [
     "ruff>=0.16.3",
 ]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# asyncio_mode = "auto" runs async tests without a per-module marker. Under the
+# default "strict" mode a module that forgets `pytestmark = pytest.mark.asyncio`
+# does not run its tests — it reports them as FAILED with "async def functions
+# are not natively supported". That failure is indistinguishable at a glance
+# from a genuine red result, so a test that never executed can be mistaken for
+# proof that a bug reproduces.
+asyncio_mode = "auto"
+# Unknown marks become errors rather than silent no-ops, so a typo in a
+# @pytest.mark name cannot quietly disable whatever it was guarding.
+addopts = "--strict-markers --strict-config"
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
