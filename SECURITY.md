@@ -58,61 +58,11 @@ Reporters are credited by name and link unless they ask not to be. Bounties are 
 - Social engineering, denial-of-service via raw resource exhaustion (Memory Vault is designed for self-hosted single-tenant use).
 - Issues that require physical or admin access to the host machine.
 
-## Threat Model (v1.0)
+## Threat Model
 
-Memory Vault is a **single-tenant, self-hosted** memory database. The threat model reflects that posture — it is not an internet-exposed multi-user SaaS, and the security boundary stops at the host's network.
+Memory Vault is a **single-tenant, self-hosted** memory database. The full threat model — assets, trust boundaries, what is defended, what is explicitly not defended, and hardening guidance for deployments beyond the default model — lives in **[docs/threat-model.md](docs/threat-model.md)**.
 
-### Who's the user?
-
-A developer or hobbyist running Memory Vault on their own machine, homelab, or single-purpose VPS. They control the host, the network, and who has access to the bearer tokens. They're security-aware enough to put it behind a reverse proxy with TLS if exposed beyond localhost.
-
-### Data sensitivity
-
-Memory contents are personal notes, conversation history, and project context — sensitive to the user but not regulated data (no PII subject access requests, no PHI, no payment data). Bearer tokens are the only secret material handled by the application; database credentials are configured via environment, not stored.
-
-### In-scope attacks
-
-| Attack | Defense |
-|---|---|
-| Network MITM between client and API | TLS is the operator's responsibility (reverse proxy in production); bearer tokens are useless without the matching hash in the DB |
-| Stolen bearer token | Rotate via `memory-vault token revoke <prefix>`; `last_used_at` column lets the operator audit suspicious tokens |
-| Brute-force token guessing | Rate limiter (120 req/min per IP, configurable); tokens are 32 random bytes from `secrets.token_urlsafe` (~256 bits of entropy); hash lookup uses `hmac.compare_digest` for constant-time comparison |
-| SQL injection via search queries, space names, file uploads | All raw SQL uses `%s` parameterization (no f-string substitution of user values); Pydantic validates every input at the API boundary; space names match a strict regex (`^[a-z0-9][a-z0-9-]*$`) |
-| XSS in dashboard | React's default escaping is in effect; no `dangerouslySetInnerHTML` anywhere; no `eval` or `new Function` |
-| DoS via oversized inputs | Search queries capped at 8 KB; chat messages capped at 32 KB; ingested text capped at 1 MB; file uploads capped at 25 MB; rate limiter trips at 120 req/min |
-| Stack-trace leakage in error responses | Global `Exception` handler returns generic 500 with no traceback; `psycopg.OperationalError` returns generic 503; full traces go to logs only, correlated by `X-Request-ID` |
-| Credentials leaking via the diagnostic bundle | `memory-vault diagnose` redacts bearer tokens, `mv_*` tokens, password/secret/api_key kv pairs, and known sensitive env vars before producing the zip |
-
-### Out of scope (acknowledged)
-
-| Threat | Why deferred |
-|---|---|
-| Multi-tenant isolation | Memory Vault v1.0 is single-user. PRO (M9) introduces multi-user with `owner_id` enforcement |
-| Encryption at rest | Operator's responsibility — use full-disk encryption on the host, or a managed Postgres with TDE |
-| External penetration audit | Single-maintainer pre-revenue product; revisit post-launch when there's budget |
-| Key Management Service | Bearer tokens are random 32-byte secrets stored as SHA-256 hashes — no rotation infra needed at this scale |
-| Malicious LLM output rendered in dashboard | Chat answers are plain text rendered by React; no HTML/JS execution path. If a future feature renders LLM output as Markdown, it will need an explicit XSS audit |
-| Compromised host machine | Out of scope by design — the host's OS/admin is the trust boundary |
-
-## Security Test Matrix
-
-The repository ships with a re-runnable curl-based pentest at [`scripts/security-pentest.sh`](scripts/security-pentest.sh). It covers:
-
-- **Auth** — missing/wrong-scheme/invalid-token rejection, valid-token success, `/api/health` unauthenticated access
-- **Input validation** — malformed JSON, missing fields, empty queries, oversized payloads (search/ingest), invalid space names
-- **Injection patterns** — SQL injection in search query, Unicode RTL-override in space name, path traversal in upload filename
-- **Rate limit** — manual verification (fire ~140 requests in 60s, observe a 429 with `Retry-After`)
-
-Run before tagging a release:
-
-```bash
-docker compose up -d
-TOKEN=$(memory-vault token create pentest)
-API_URL=http://localhost:8000 API_TOKEN="$TOKEN" bash scripts/security-pentest.sh
-memory-vault token revoke "${TOKEN:0:11}"
-```
-
-Every case must pass before a tag goes out.
+Read it before exposing an instance beyond your own machine.
 
 ## Static Analysis & Dependency Health
 
