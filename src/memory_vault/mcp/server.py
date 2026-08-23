@@ -90,6 +90,27 @@ def _estimate_tokens(text: str) -> int:
     return len(text) // 4
 
 
+_TRUNCATION_SUFFIX = "... [truncated]"
+
+
+def _truncate_to_tokens(text: str, max_tokens: int) -> str:
+    """Cut `text` so that it plus its truncation marker fits in `max_tokens`.
+
+    `_estimate_tokens` is `len(text) // 4`, so a token allowance converts to
+    four times as many characters. The marker is part of what gets sent, so it
+    comes out of the same allowance rather than being added on top — otherwise
+    truncating to the limit still exceeds it.
+    """
+    if max_tokens <= 0:
+        return _TRUNCATION_SUFFIX
+    allowed_chars = max_tokens * 4 - len(_TRUNCATION_SUFFIX)
+    if allowed_chars <= 0:
+        return _TRUNCATION_SUFFIX
+    if len(text) <= allowed_chars:
+        return text
+    return text[:allowed_chars] + _TRUNCATION_SUFFIX
+
+
 def _budget_results(results: list[dict], max_tokens: int) -> tuple[list[dict], bool]:
     """
     Fit results within a token budget.
@@ -107,7 +128,17 @@ def _budget_results(results: list[dict], max_tokens: int) -> tuple[list[dict], b
         content = r["content"]
         entry_tokens = _estimate_tokens(content) + 40
 
-        if tokens_used < full_budget:
+        if tokens_used < full_budget and tokens_used + entry_tokens > max_tokens:
+            # Room by the full-content rule, but this one entry would blow the
+            # whole budget on its own. The first result always satisfies
+            # `tokens_used < full_budget`, so without this a single oversized
+            # memory was admitted whole and the advertised cap meant nothing.
+            truncated = True
+            r_copy = dict(r)
+            r_copy["content"] = _truncate_to_tokens(content, max_tokens - tokens_used - 40)
+            budgeted.append(r_copy)
+            tokens_used += _estimate_tokens(r_copy["content"]) + 40
+        elif tokens_used < full_budget:
             budgeted.append(r)
             tokens_used += entry_tokens
         elif tokens_used < max_tokens:
