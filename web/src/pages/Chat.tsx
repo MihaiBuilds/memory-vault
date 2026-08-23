@@ -153,7 +153,20 @@ export default function ChatPage() {
       })
     } catch (err) {
       if (controller.signal.aborted) {
-        // user-initiated cancel — leave state as-is
+        // User-initiated cancel. The outer `streaming` flag is cleared in
+        // `finally`, but rendering keys off the turn's own status — so leaving
+        // it as 'streaming' left a stopped answer showing "Thinking…" or a
+        // pulsing cursor indefinitely. Move it to a terminal state while
+        // keeping whatever text had already arrived.
+        setTurns((prev) => {
+          const next = [...prev]
+          const idx = next.length - 1
+          const cur = next[idx]
+          if (cur.role === 'assistant' && cur.status === 'streaming') {
+            next[idx] = { ...cur, status: 'done' }
+          }
+          return next
+        })
       } else {
         const message =
           err instanceof ApiError
