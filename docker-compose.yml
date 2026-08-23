@@ -32,6 +32,14 @@ services:
       DB_NAME: memory_vault
       DB_USER: memory_vault
       DB_PASSWORD: memory_vault
+      # Least-privilege option: migrations define memory_vault_app /
+      # memory_vault_readonly / memory_vault_migrator group roles. To use them,
+      # create two login roles, grant each one group, then point DB_USER at the
+      # app role and set the two variables below to the migrator. Unset means
+      # migrations run as DB_USER, which is the single-role setup above.
+      # See docs/threat-model.md.
+      # DB_MIGRATION_USER: memory_vault_migrate
+      # DB_MIGRATION_PASSWORD: change_me
       API_HOST: 0.0.0.0
       API_PORT: 8000
       API_AUTH_ENABLED: "true"

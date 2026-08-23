@@ -215,6 +215,46 @@ Change the default `memory_vault` / `memory_vault` credentials in
 `docker-compose.yml`. They are convenient defaults for local use and unsuitable
 anywhere else.
 
+### Least-privilege database roles
+
+By default one database user both creates the schema at start-up and serves
+every request, so anything reaching that connection has rights to change or drop
+your data. Migrations define three group roles you can adopt to narrow that:
+
+| Role | Rights |
+| --- | --- |
+| `memory_vault_app` | `SELECT`/`INSERT`/`UPDATE`/`DELETE`. No schema changes |
+| `memory_vault_readonly` | `SELECT` only — for dashboards, backups, and ad-hoc psql |
+| `memory_vault_migrator` | Schema changes, used only while migrations run |
+
+They are group roles with no login of their own, so nothing changes until you
+opt in. To adopt the split, create two login roles and grant each one group:
+
+```sql
+CREATE ROLE memory_vault_app_login LOGIN PASSWORD 'change_me';
+GRANT memory_vault_app TO memory_vault_app_login;
+
+CREATE ROLE memory_vault_migrate LOGIN PASSWORD 'change_me_too';
+GRANT memory_vault_migrator TO memory_vault_migrate;
+```
+
+Then point the application at the app role and give it the migrator credentials
+for migrations only:
+
+```yaml
+DB_USER: memory_vault_app_login
+DB_PASSWORD: change_me
+DB_MIGRATION_USER: memory_vault_migrate
+DB_MIGRATION_PASSWORD: change_me_too
+```
+
+With `DB_MIGRATION_USER` unset, migrations run as `DB_USER` — the single-role
+setup, unchanged.
+
+One caveat: after adopting the split, run future migrations as the migrator
+role. Tables it creates carry default privileges for the app and read-only
+roles; tables created by some other role do not.
+
 ---
 
 ## Verifying the posture
@@ -248,7 +288,7 @@ Recorded here rather than left implicit. These are accepted, not hidden.
 | Gap | Status |
 | --- | --- |
 | Containers run as root | Open |
-| One database role for both migrations and runtime | Open |
+| One database role for both migrations and runtime | Still the default; opt-in roles available (see above) |
 | API tokens never expire | Open |
 | No per-space or per-scope token permissions | Not planned — spaces are not a security boundary |
 | Memory content stored unencrypted | Not planned — disk encryption is the operator's responsibility |
