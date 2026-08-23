@@ -84,8 +84,21 @@ def _split_long_text(
     return chunks
 
 
+def _split_by_words(text: str, max_words: int) -> list[str]:
+    """Split on word boundaries, ignoring punctuation entirely.
+
+    The floor under every other strategy. Paragraph and sentence splitting both
+    need a boundary to cut on, and text can simply not have one — a wall of
+    prose with no blank line and no terminator, minified content, a language
+    this splitter has no rules for. Words always exist, so this always
+    terminates and always respects the cap.
+    """
+    words = text.split()
+    return [" ".join(words[i : i + max_words]) for i in range(0, len(words), max_words)]
+
+
 def _split_by_sentences(text: str, max_words: int) -> list[str]:
-    """Last-resort split by sentence boundaries."""
+    """Split by sentence boundaries, falling back to words when one is oversized."""
     import re
 
     sentences = re.split(r"(?<=[.!?])\s+", text)
@@ -95,6 +108,19 @@ def _split_by_sentences(text: str, max_words: int) -> list[str]:
 
     for sent in sentences:
         sent_wc = _word_count(sent)
+
+        # A single sentence over the cap has no sentence boundary to cut on, so
+        # sentence splitting cannot help it. Previously it was appended whole
+        # and `max_words` stopped being an upper bound — and because the flush
+        # below is guarded on `current` being non-empty, an oversized FIRST
+        # sentence escaped even when more text followed it.
+        if sent_wc > max_words:
+            if current:
+                chunks.append(" ".join(current))
+                current, current_wc = [], 0
+            chunks.extend(_split_by_words(sent, max_words))
+            continue
+
         if current_wc + sent_wc > max_words and current:
             chunks.append(" ".join(current))
             current, current_wc = [], 0
