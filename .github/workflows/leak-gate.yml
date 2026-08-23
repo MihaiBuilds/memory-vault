@@ -1,0 +1,128 @@
+name: Leak gate
+
+# Local git hooks catch some of this before a commit, but they only ever see the
+# command line. Anything written through the GitHub API — a PR body from a file,
+# an issue edited in the browser, release notes — never passes a local hook at
+# all. This runs where those artifacts actually land.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, reopened, synchronize]
+  issues:
+    types: [opened, edited]
+  release:
+    types: [published, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+concurrency:
+  group: leak-gate-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: Scan public text for internal references
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Need the base commit to diff against for the changed-files scan.
+          fetch-depth: 0
+
+      - name: Scan
+        env:
+          # Through the environment, never interpolated into the script. A PR
+          # title containing a backtick or $( would otherwise be executed.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        # Actions runs `bash -e` by default, which aborts on the first non-zero
+        # exit. This script inspects grep's exit code deliberately — 1 means "no
+        # match" and is the normal case — so errexit has to be off or the script
+        # dies silently on the first clean pattern. Failure is signalled by
+        # explicit `exit 1` instead.
+        shell: bash --noprofile --norc {0}
+        run: |
+          set -uo pipefail
+
+          PATTERNS=".github/leak-patterns.txt"
+
+          # Fail closed. A missing or empty pattern file means the gate is not
+          # doing anything, and a gate that silently does nothing is worse than
+          # no gate — it produces a green check that means nothing.
+          if [ ! -f "$PATTERNS" ]; then
+            echo "::error::$PATTERNS is missing — the leak gate cannot run."
+            exit 1
+          fi
+
+          mapfile -t RULES < <(grep -vE '^[[:space:]]*(#|$)' "$PATTERNS" || true)
+          if [ "${#RULES[@]}" -eq 0 ]; then
+            echo "::error::$PATTERNS defines no patterns — refusing to pass vacuously."
+            exit 1
+          fi
+
+          # Validate every pattern before scanning anything. grep exits 1 for
+          # "no match" and 2 for "bad regex", and only the second is a problem —
+          # so the exit code has to be captured and compared, not just tested for
+          # truthiness. Getting this wrong rejects every valid pattern instead.
+          for rule in "${RULES[@]}"; do
+            printf '' | grep -Eq "$rule" 2>/dev/null
+            status=$?
+            if [ "$status" -gt 1 ]; then
+              echo "::error::Invalid pattern in $PATTERNS: $rule"
+              exit 1
+            fi
+          done
+
+          echo "Loaded ${#RULES[@]} pattern(s)."
+
+          FOUND=0
+
+          scan_text() {
+            local label="$1" text="$2"
+            [ -z "$text" ] && return 0
+            for rule in "${RULES[@]}"; do
+              local hits
+              hits="$(printf '%s' "$text" | grep -Eoi "$rule" | sort -u || true)"
+              if [ -n "$hits" ]; then
+                FOUND=1
+                while IFS= read -r hit; do
+                  echo "::error::$label contains an internal reference: $hit"
+                done <<< "$hits"
+              fi
+            done
+          }
+
+          scan_text "PR title"      "${PR_TITLE:-}"
+          scan_text "PR body"       "${PR_BODY:-}"
+          scan_text "Issue title"   "${ISSUE_TITLE:-}"
+          scan_text "Issue body"    "${ISSUE_BODY:-}"
+          scan_text "Release name"  "${RELEASE_NAME:-}"
+          scan_text "Release body"  "${RELEASE_BODY:-}"
+
+          # Added lines in the diff. Only additions — an existing match should be
+          # fixed deliberately, not block every PR that happens to touch the file.
+          if [ -n "${BASE_SHA:-}" ] && [ -n "${HEAD_SHA:-}" ]; then
+            ADDED="$(git diff "$BASE_SHA" "$HEAD_SHA" --unified=0 \
+                      -- . ':(exclude).github/leak-patterns.txt' \
+                     | grep -E '^\+' | grep -vE '^\+\+\+' || true)"
+            scan_text "Changed files" "$ADDED"
+          fi
+
+          if [ "$FOUND" -ne 0 ]; then
+            echo ""
+            echo "These belong in private notes, not in a public artifact."
+            echo "Patterns live in $PATTERNS."
+            exit 1
+          fi
+
+          echo "No internal references found."
