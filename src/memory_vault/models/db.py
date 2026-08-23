@@ -21,8 +21,16 @@ _pool: AsyncConnectionPool | None = None
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
 
 
-async def init_pool(min_size: int = 2, max_size: int = 10) -> AsyncConnectionPool:
+async def init_pool(
+    min_size: int = 2,
+    max_size: int = 10,
+    conninfo: str | None = None,
+) -> AsyncConnectionPool:
     """Create and open the async connection pool.
+
+    ``conninfo`` overrides the runtime credentials; the migration path passes
+    ``settings.migration_database_url`` so DDL runs as a role the serving pool
+    does not use. Everything else leaves it unset.
 
     On any failure during construction, ``open()``, or the post-open
     dimension check, the partially-initialized pool is closed on a
@@ -36,7 +44,7 @@ async def init_pool(min_size: int = 2, max_size: int = 10) -> AsyncConnectionPoo
         return _pool
 
     pool = AsyncConnectionPool(
-        conninfo=settings.database_url,
+        conninfo=conninfo or settings.database_url,
         min_size=min_size,
         max_size=max_size,
         open=False,

@@ -134,9 +134,15 @@ def main() -> None:
 
 
 async def _cmd_migrate() -> None:
+    from memory_vault.config import settings
     from memory_vault.models.db import close_pool, init_pool, run_migrations
 
-    await init_pool()
+    # Migrations are the only path that needs DDL rights. When
+    # DB_MIGRATION_USER is unset this is the same credential as the runtime
+    # one, which is what every single-role deployment already does.
+    if settings.db_migration_user:
+        print(f"Applying migrations as: {settings.db_migration_user}")
+    await init_pool(conninfo=settings.migration_database_url)
     await run_migrations()
     await close_pool()
     print("Migrations complete.")
