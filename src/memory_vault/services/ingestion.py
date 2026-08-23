@@ -52,6 +52,11 @@ class IngestionJob:
     priority: int
     file_path: str = field(compare=False)
     space_id: int = field(compare=False)
+    # What to record as the chunk's source. Uploads read from a temporary file
+    # that is deleted when the request ends, so the path they ingest from is
+    # not a durable identifier — the original filename is. None means "use
+    # file_path", which is what CLI and directory ingestion want.
+    source_name: str | None = field(default=None, compare=False)
 
 
 class IngestionPipeline:
@@ -73,8 +78,14 @@ class IngestionPipeline:
         file_path: str,
         space_id: int,
         priority: Priority = Priority.BATCH,
+        source_name: str | None = None,
     ) -> None:
-        job = IngestionJob(priority=priority, file_path=file_path, space_id=space_id)
+        job = IngestionJob(
+            priority=priority,
+            file_path=file_path,
+            space_id=space_id,
+            source_name=source_name,
+        )
         self._queue.put_nowait(job)
         self._stats.queued += 1
 
@@ -129,8 +140,12 @@ class IngestionPipeline:
             logger.warning("Skipping empty file: %s", file_path)
             return
 
+        # Detection reads the real path — it needs the extension of the file
+        # actually on disk. What gets recorded as the source is the logical
+        # name when one was supplied, because an upload's temporary path stops
+        # existing the moment the request ends.
         adapter = detect_adapter(file_path, content=raw)
-        raw_chunks = adapter.parse(raw, source_path=file_path)
+        raw_chunks = adapter.parse(raw, source_path=job.source_name or file_path)
 
         if not raw_chunks:
             logger.warning("No chunks produced from: %s", file_path)
