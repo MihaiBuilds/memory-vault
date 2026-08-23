@@ -71,7 +71,6 @@ supplies. Memory Vault does not restrict where that points; see
 | Unauthenticated access to memory | Bearer token required on every route except `/api/health`. Tokens are 32 random bytes from `secrets.token_urlsafe`, stored only as SHA-256 hashes |
 | Brute-force token guessing | Token entropy plus a rate limiter (120 req/min per IP, configurable); hash comparison uses `hmac.compare_digest` for constant-time behaviour |
 | Stolen bearer token | Revoke with `memory-vault token revoke <prefix>`; revocation takes effect on the next request. `last_used_at` lets the operator audit suspicious tokens |
-| Network MITM between client and API | Not solved in-application: TLS is the operator's responsibility via a reverse proxy. Tokens are useless without the matching hash in the database |
 | SQL injection | All raw SQL uses `%s` parameter binding — no f-string substitution of user values. Pydantic validates every input at the API boundary; space names must match `^[a-z0-9][a-z0-9-]*$` |
 | Path traversal in static file serving | `_safe_static_path()` sanitises with `os.path.commonpath` and `os.path.realpath`, and rejects malformed input before composition |
 | XSS in the dashboard | React's default escaping; no `dangerouslySetInnerHTML`, no `eval`, no `new Function` anywhere in the web source |
@@ -83,7 +82,8 @@ supplies. Memory Vault does not restrict where that points; see
 
 ## Out of scope — what Memory Vault does NOT defend against
 
-This section matters more than the one above.
+Each of these is a deliberate boundary, not an oversight. Knowing where they sit
+is what lets you decide whether the default deployment fits your situation.
 
 **A stolen API token.** Tokens carry full access to every space in the instance.
 There are no scopes and no per-space permissions. Treat a token as equivalent to
@@ -118,9 +118,6 @@ resets on restart and is trivially bypassed by a distributed source.
 
 **Deletion recovering storage.** `forget` is a soft delete — the row is marked,
 not removed, so the content remains in the database. Tracked in issue #74.
-
-**Dependency vulnerabilities before an advisory exists.** Report those upstream
-first.
 
 ---
 
