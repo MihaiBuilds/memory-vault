@@ -59,6 +59,13 @@ def main() -> None:
 
     p_tok_create = token_sub.add_parser("create", help="Create a new API token")
     p_tok_create.add_argument("name", help="A friendly name for the token")
+    p_tok_create.add_argument(
+        "--expires-in-days",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Expire the token after N days (default: never expires)",
+    )
 
     p_tok_revoke = token_sub.add_parser("revoke", help="Revoke a token by prefix")
     p_tok_revoke.add_argument("prefix", help="Token prefix (first 11 chars)")
@@ -203,12 +210,18 @@ async def _cmd_token(args) -> None:
     await init_pool()
     try:
         if args.token_cmd == "create":
-            plaintext = await create_token(args.name)
+            expires_in_days = getattr(args, "expires_in_days", None)
+            if expires_in_days is not None and expires_in_days < 1:
+                print("--expires-in-days must be 1 or greater.")
+                sys.exit(1)
+            plaintext = await create_token(args.name, expires_in_days)
             print("")
             print("  Token created. Copy it now — it will NOT be shown again.")
             print("")
             print(f"  Name:  {args.name}")
             print(f"  Token: {plaintext}")
+            if expires_in_days is not None:
+                print(f"  Expires: in {expires_in_days} day{'s' if expires_in_days != 1 else ''}")
             print("")
             print("  Use it with: Authorization: Bearer <token>")
             print("")
@@ -221,17 +234,30 @@ async def _cmd_token(args) -> None:
                 sys.exit(1)
         elif args.token_cmd == "list":
             rows = await fetch_all(
-                """SELECT name, token_prefix, created_at, last_used_at, revoked_at
+                """SELECT name, token_prefix, created_at, last_used_at, revoked_at,
+                          expires_at,
+                          (expires_at IS NOT NULL AND expires_at <= now()) AS is_expired
                    FROM api_tokens ORDER BY created_at DESC"""
             )
             if not rows:
                 print("No tokens yet. Create one with: memory-vault token create <name>")
                 return
-            print(f"{'NAME':<20} {'PREFIX':<14} {'CREATED':<22} {'STATUS'}")
+            print(f"{'NAME':<20} {'PREFIX':<14} {'CREATED':<22} {'EXPIRES':<22} {'STATUS'}")
             for r in rows:
-                status_txt = "revoked" if r["revoked_at"] else "active"
+                # Revoked wins over expired: revocation is a decision someone
+                # made, expiry is just time passing.
+                if r["revoked_at"]:
+                    status_txt = "revoked"
+                elif r["is_expired"]:
+                    status_txt = "expired"
+                else:
+                    status_txt = "active"
                 created = str(r["created_at"])[:19]
-                print(f"{r['name']:<20} {r['token_prefix']:<14} {created:<22} {status_txt}")
+                expires = str(r["expires_at"])[:19] if r["expires_at"] else "never"
+                print(
+                    f"{r['name']:<20} {r['token_prefix']:<14} "
+                    f"{created:<22} {expires:<22} {status_txt}"
+                )
     finally:
         await close_pool()
 

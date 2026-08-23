@@ -38,13 +38,20 @@ def generate_token() -> tuple[str, str, str]:
     return token, hash_token(token), token[:11]
 
 
-async def create_token(name: str) -> str:
-    """Persist a new token and return the plaintext (shown once)."""
+async def create_token(name: str, expires_in_days: int | None = None) -> str:
+    """
+    Persist a new token and return the plaintext (shown once).
+
+    `expires_in_days=None` creates a token that never expires, which is the
+    default and matches every token issued before expiry existed.
+    """
     plaintext, token_hash, prefix = generate_token()
     await execute_query(
-        """INSERT INTO api_tokens (name, token_hash, token_prefix)
-           VALUES (%s, %s, %s)""",
-        (name, token_hash, prefix),
+        """INSERT INTO api_tokens (name, token_hash, token_prefix, expires_at)
+           VALUES (%s, %s, %s,
+                   CASE WHEN %s::int IS NULL THEN NULL
+                        ELSE now() + make_interval(days => %s::int) END)""",
+        (name, token_hash, prefix, expires_in_days, expires_in_days),
     )
     return plaintext
 
@@ -83,31 +90,52 @@ async def require_token(
         )
 
     presented_hash = hash_token(credentials.credentials)
+    # Expired and revoked tokens are fetched too, not filtered out in SQL, so a
+    # token that once existed can be told apart from one that never did. The
+    # distinction never reaches an anonymous caller — it only changes which
+    # message a holder of a real-but-dead token sees, and "your token expired"
+    # saves an operator from hunting a bug that is really a lapsed credential.
     rows = await fetch_all(
-        """SELECT id, token_hash FROM api_tokens
-           WHERE revoked_at IS NULL""",
+        """SELECT id, revoked_at,
+                  (expires_at IS NOT NULL AND expires_at <= now()) AS is_expired,
+                  token_hash
+           FROM api_tokens""",
     )
 
-    # Constant-time scan over all active tokens. SHA-256 of a 32-byte token
+    # Constant-time scan over all tokens. SHA-256 of a 32-byte token
     # gives effectively-random hashes, so a non-constant-time SQL `=` lookup
     # would already be hard to time-attack — but compare_digest makes the
     # property explicit and satisfies the v1.0 security review verbatim.
-    matched_id = None
+    matched = None
     for row in rows:
         if hmac.compare_digest(presented_hash, row["token_hash"]):
-            matched_id = row["id"]
+            matched = row
             break
 
-    if matched_id is None:
+    if matched is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or revoked token",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if matched["revoked_at"] is not None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or revoked token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if matched["is_expired"]:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     await execute_query(
         "UPDATE api_tokens SET last_used_at = now() WHERE id = %s",
-        (matched_id,),
+        (matched["id"],),
     )
 
 
