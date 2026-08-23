@@ -579,6 +579,7 @@ Memory Vault is MIT-licensed and PRs are welcome. See:
 - [CONTRIBUTING.md](CONTRIBUTING.md) — how to report bugs, suggest features, set up dev environment, coding conventions
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Contributor Covenant v2.1
 - [SECURITY.md](SECURITY.md) — reporting vulnerabilities (email `support@mihaibuilds.com`, don't open public issues)
+- [docs/threat-model.md](docs/threat-model.md) — what Memory Vault defends against, what it does not, and how to harden a deployment that goes beyond a single machine
 - [Bug report template](.github/ISSUE_TEMPLATE/bug_report.yml) — includes `memory-vault diagnose` instructions
 - [Feature request template](.github/ISSUE_TEMPLATE/feature_request.yml) — frame the problem before suggesting a solution
 
