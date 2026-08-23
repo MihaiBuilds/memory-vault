@@ -64,7 +64,13 @@ no memory content.
 **2 · REST API → database.** The application holds one Postgres credential and
 uses it for everything.
 
-**3 · Host → container.** Not currently enforced. See [Known gaps](#known-gaps).
+**3 · Host → container.** The images run as a non-root user (uid 10001) and the
+shipped compose file gives them a read-only root filesystem, drops all Linux
+capabilities, and sets `no-new-privileges`. Nothing is written inside the
+container at runtime: the embedding model is baked in at build time, logs go to
+a mounted volume, and streamed uploads go to a tmpfs. This narrows what a
+process that escapes the application can do; it does not contain an attacker who
+has the host.
 
 **4 · Memory Vault → LLM endpoint.** Outbound only, to a URL the operator
 supplies. Memory Vault does not restrict where that points; see
@@ -287,7 +293,7 @@ Recorded here rather than left implicit. These are accepted, not hidden.
 
 | Gap | Status |
 | --- | --- |
-| Containers run as root | Open |
+| Containers run as root | Closed — non-root (uid 10001), read-only rootfs, all capabilities dropped |
 | One database role for both migrations and runtime | Still the default; opt-in roles available (see above) |
 | API tokens never expire | Open |
 | No per-space or per-scope token permissions | Not planned — spaces are not a security boundary |

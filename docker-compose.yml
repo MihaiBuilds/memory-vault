@@ -46,6 +46,18 @@ services:
       API_CORS_ORIGINS: "*"
       API_RATE_LIMIT_PER_MIN: "120"
       LOG_LEVEL: "INFO"
+    # The image runs as a non-root user (uid 10001) and needs nothing in its
+    # own filesystem at runtime: the embedding model is baked in at build time,
+    # logs go to the volume below, and streamed uploads go to the tmpfs. That
+    # makes a read-only root filesystem practical rather than aspirational.
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      # File uploads are streamed to a tempfile before ingestion.
+      - /tmp
     volumes:
       - app_logs:/var/log/memory-vault
 
