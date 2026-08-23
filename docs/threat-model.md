@@ -8,6 +8,11 @@ to change if it doesn't.
 For reporting a vulnerability, supported versions, and disclosure policy, see
 [SECURITY.md](../SECURITY.md).
 
+You do not have to take the claims below on trust. The repository ships a
+re-runnable pentest script that exercises the auth, input-validation and
+injection defenses against a live instance — see
+[Verifying the posture](#verifying-the-posture).
+
 Memory Vault is a **single-tenant, self-hosted** application. That assumption
 runs through every decision below. If your deployment breaks that assumption,
 read [Deployments beyond the default model](#deployments-beyond-the-default-model).
@@ -17,8 +22,11 @@ read [Deployments beyond the default model](#deployments-beyond-the-default-mode
 ## Who this is for
 
 A developer or hobbyist running Memory Vault on their own machine, homelab, or
-single-purpose VPS. They control the host, the network, and who holds the bearer
-tokens. The security boundary stops at the host's network.
+single-purpose VPS, where they control the host, the network, and who holds the
+bearer tokens. The security boundary stops at the host's network.
+
+If that describes your deployment, the defaults are built for you. If it does
+not, the gap is documented rather than assumed away.
 
 Memory contents are personal notes, conversation history, and project context —
 sensitive to the operator, but not regulated data. Memory Vault is not built for
@@ -134,10 +142,13 @@ with a valid token, that request can be aimed at any address the container can
 reach — including link-local metadata endpoints such as `169.254.169.254` on
 cloud instances.
 
-Under the single-tenant model this is not a privilege escalation, because anyone
-holding a valid token is already the operator. **If your deployment breaks that
-assumption, the correct mitigation is at the network layer, not in the
-application** — see below.
+Under the single-tenant model this grants no access the caller did not already
+have, because anyone holding a valid token is already the operator. That
+reasoning holds exactly as long as the token does: **a leaked token turns this
+into a request-forgery primitive against whatever the container can reach.**
+That is the real risk, and it is why the token hygiene and egress guidance below
+are not optional on an exposed host. **The correct mitigation is at the network
+layer, not in the application.**
 
 Static analysis flags this pattern (CodeQL `py/partial-ssrf`). Those alerts are
 dismissed as "won't fix" with this rationale rather than being suppressed
@@ -236,9 +247,9 @@ Recorded here rather than left implicit. These are accepted, not hidden.
 
 | Gap | Status |
 | --- | --- |
-| Containers run as root | Being addressed |
-| One database role for both migrations and runtime | Being addressed |
-| API tokens never expire | Being addressed |
+| Containers run as root | Open |
+| One database role for both migrations and runtime | Open |
+| API tokens never expire | Open |
 | No per-space or per-scope token permissions | Not planned — spaces are not a security boundary |
 | Memory content stored unencrypted | Not planned — disk encryption is the operator's responsibility |
 | `forget` does not reclaim storage | Tracked in issue #74 |
