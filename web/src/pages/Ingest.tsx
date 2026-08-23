@@ -251,7 +251,16 @@ function FileTab() {
     if (files.length === 0 || running) return
     setRunning(true)
 
-    for (let i = 0; i < files.length; i++) {
+    // Only the entries still pending. This loop used to run over every file
+    // and reset each status to 'uploading' regardless of what it already was,
+    // so adding a file after a finished batch re-uploaded the completed ones —
+    // while the button correctly offered to ingest only the new file. The
+    // filter matches `pendingCount`, so what runs is what the button promised.
+    const pendingIndexes = statuses
+      .map((s, i) => (s.state === 'pending' ? i : -1))
+      .filter((i) => i !== -1)
+
+    for (const i of pendingIndexes) {
       setStatuses((prev) => {
         const next = [...prev]
         next[i] = { state: 'uploading' }
