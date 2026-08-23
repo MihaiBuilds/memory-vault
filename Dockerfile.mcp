@@ -31,15 +31,19 @@ RUN pip install --no-cache-dir . \
 ENV HF_HOME=/opt/model-cache/huggingface \
     SENTENCE_TRANSFORMERS_HOME=/opt/model-cache/sentence-transformers
 
+# Create the user BEFORE the model download. A `chown -R` afterwards rewrites
+# every model file into a new layer, storing the whole ~92MB cache twice in the
+# image. Downloading as the owning user avoids that entirely.
+RUN useradd --system --uid 10001 --create-home --home-dir /home/memoryvault memoryvault \
+    && mkdir -p /opt/model-cache \
+    && chown -R memoryvault:memoryvault /app /opt/model-cache
+
+USER memoryvault
+
 # Bake the embedding model in at build time. An MCP server is launched by a
 # client on demand, so a first-run download would put a network fetch in the
 # path of the user's first recall — and fail outright on a read-only rootfs.
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
-
-RUN useradd --system --uid 10001 --create-home --home-dir /home/memoryvault memoryvault \
-    && chown -R memoryvault:memoryvault /app /opt/model-cache
-
-USER memoryvault
 
 # stdio MCP server — no port exposed, no healthcheck (stdio has no HTTP surface)
 ENTRYPOINT ["python", "-m", "memory_vault.mcp"]

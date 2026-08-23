@@ -4,8 +4,9 @@ Container hardening properties.
 These assert the shape of the Dockerfiles and the shipped compose file rather
 than a running container — the runtime behaviour is verified by actually
 booting the image, which does not belong in the unit suite. What these catch is
-the silent regression: someone adds a RUN step after USER, or drops the
-read_only flag while debugging, and nothing else notices.
+the silent regression: someone re-adds a `chown` after the user switch, moves
+the model download back before it (which quietly doubles the image's model
+layer), or drops the read_only flag while debugging, and nothing else notices.
 """
 
 from __future__ import annotations
@@ -31,16 +32,35 @@ def test_image_switches_to_a_non_root_user(dockerfile):
 
 
 @pytest.mark.parametrize("dockerfile", DOCKERFILES)
-def test_nothing_runs_after_the_user_switch(dockerfile):
+def test_no_ownership_fixups_after_the_user_switch(dockerfile):
     """
-    A RUN placed after USER either fails on a read-only path or quietly writes
-    files owned by the wrong user. Keeping the switch last makes that ordering
-    mistake impossible to introduce accidentally.
+    Running a step as the non-root user is fine and often desirable — the model
+    download does it so the files land already owned, instead of being rewritten
+    into a second ~92MB layer by a later `chown -R`.
+
+    What must NOT appear after the switch is another ownership fixup: at that
+    point the build has no privileges to change ownership, so it either fails or
+    silently does nothing.
     """
     lines = [ln.strip() for ln in _lines(dockerfile)]
     user_at = max(i for i, ln in enumerate(lines) if ln.startswith("USER "))
-    after = [ln for ln in lines[user_at + 1 :] if ln.startswith("RUN ")]
-    assert after == [], f"{dockerfile} has RUN steps after USER: {after}"
+    offenders = [ln for ln in lines[user_at + 1 :] if "chown" in ln or ln.startswith("RUN useradd")]
+    assert offenders == [], f"{dockerfile} changes ownership after USER: {offenders}"
+
+
+@pytest.mark.parametrize("dockerfile", DOCKERFILES)
+def test_model_is_downloaded_after_the_user_switch(dockerfile):
+    """
+    Ordering is a size property, not just a permissions one. Downloading the
+    model before `chown -R` stores the whole cache twice — once as root, once
+    re-owned — which cost ~92MB until it was measured.
+    """
+    lines = [ln.strip() for ln in _lines(dockerfile)]
+    user_at = max(i for i, ln in enumerate(lines) if ln.startswith("USER "))
+    model_at = max(i for i, ln in enumerate(lines) if "SentenceTransformer(" in ln)
+    assert model_at > user_at, (
+        f"{dockerfile} downloads the model before USER, duplicating the cache layer"
+    )
 
 
 @pytest.mark.parametrize("dockerfile", DOCKERFILES)
