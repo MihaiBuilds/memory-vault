@@ -33,7 +33,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "httpx>=0.28.1",
-    "ruff>=0.16.3",
+    "ruff>=0.16.4",
     # Used by the container-hardening tests to read docker-compose.yml. It
     # arrives transitively today; declaring it means a dependency bump cannot
     # silently take the test suite with it.
