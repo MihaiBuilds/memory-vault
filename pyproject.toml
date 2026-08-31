@@ -19,7 +19,7 @@ dependencies = [
     # 2.x replaced mcp.server.fastmcp with mcp.server.mcpserver, so 1.x and 2.x
     # cannot both be supported by one import. The floor is 2.0.0 for that
     # reason rather than a feature need.
-    "mcp>=2.0.0,<3.0.0",
+    "mcp>=2.1.1,<3.0.0",
     "fastapi>=0.141.1,<1",
     "uvicorn[standard]>=0.52.4,<1",
     "python-multipart>=0.0.32",
