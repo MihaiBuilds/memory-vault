@@ -248,6 +248,10 @@ export const api = {
       body: JSON.stringify({ name, description }),
     }),
 
+  /** Deletes an empty space. Throws ApiError 409 if it still holds anything. */
+  deleteSpace: (name: string) =>
+    request<void>(`/api/spaces/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+
   search: (body: SearchRequest) =>
     request<SearchResponse>('/api/search', {
       method: 'POST',

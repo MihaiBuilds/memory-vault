@@ -1,13 +1,19 @@
-"""Memory spaces endpoints — list and create."""
+"""Memory spaces endpoints — list, create, and delete."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Path, status
 
 from memory_vault.api.deps import require_token
 from memory_vault.api.schemas import SpaceCreateRequest, SpaceInfo, SpaceList
 from memory_vault.models.db import execute_returning, fetch_all
-from memory_vault.services.spaces import RESERVED_SPACE_NAMES
+from memory_vault.services.spaces import (
+    RESERVED_SPACE_NAMES,
+    SpaceNotEmpty,
+    SpaceNotFound,
+    SpaceReserved,
+    delete_space,
+)
 
 router = APIRouter(prefix="/api", tags=["spaces"], dependencies=[Depends(require_token)])
 
@@ -65,3 +71,29 @@ async def create_space(req: SpaceCreateRequest) -> SpaceInfo:
             detail=f"Space already exists: {req.name}",
         )
     return SpaceInfo(name=req.name, description=req.description, chunk_count=0)
+
+
+@router.delete("/spaces/{name}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_space(
+    name: str = Path(
+        ...,
+        min_length=1,
+        max_length=64,
+        pattern=r"^[a-z0-9][a-z0-9-]*$",
+        description="Name of the space to delete. It must hold no memories or entities.",
+    ),
+) -> None:
+    """Delete an empty space.
+
+    Deliberately refuses to delete anything but an empty space: 409 rather
+    than removing someone's memories because they asked to tidy up a name.
+    See `delete_space` for why emptiness covers entities as well as chunks.
+    """
+    try:
+        await delete_space(name)
+    except SpaceReserved as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
+    except SpaceNotFound as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except SpaceNotEmpty as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
