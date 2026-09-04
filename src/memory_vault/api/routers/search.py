@@ -38,6 +38,7 @@ async def search(req: SearchRequest) -> SearchResponse:
         space_ids=space_ids,
         since=since_dt,
         limit=req.limit,
+        ef_search=req.ef_search,
     )
 
     await log_query(req.query, space_ids or None, results, elapsed_ms)

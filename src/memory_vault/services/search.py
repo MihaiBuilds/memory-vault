@@ -18,7 +18,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 from memory_vault.config import settings
-from memory_vault.models.db import execute_query, fetch_all, fetch_one
+from memory_vault.models.db import (
+    execute_query,
+    fetch_all,
+    fetch_all_with_setting,
+    fetch_one,
+)
 from memory_vault.services.embedding import _get_model, embed, embed_batch
 
 logger = logging.getLogger(__name__)
@@ -157,6 +162,14 @@ _FTS_WEIGHT = 0.5
 _IMPORTANCE_WEIGHT = 0.15
 _RECENCY_HALF_LIFE_DAYS = 90
 _RECENCY_MAX_BOOST = 0.05
+
+# HNSW search breadth. Higher values search more of the index, trading latency
+# for recall; the server default is 40. The ceiling is not pgvector's limit
+# (1000) but a practical one: this is a knob a caller can set per request, and
+# a large value turns one search into a slow scan. Capping it keeps a careless
+# or hostile caller from doing that to an instance.
+_EF_SEARCH_MIN = 1
+_EF_SEARCH_MAX = 1000
 
 
 @dataclass
@@ -306,9 +319,16 @@ async def hybrid_search(
     limit: int | None = None,
     *,
     enrich: bool = True,
+    ef_search: int | None = None,
 ) -> tuple[list[SearchResult], list[str], int]:
     """
     Hybrid search: vector (HNSW) + full-text (tsvector GIN) + RRF merging.
+
+    `ef_search` raises HNSW's search breadth for this query only, trading
+    latency for recall on a corpus where the default misses relevant matches.
+    None leaves the server default (40) alone; out-of-range values are clamped
+    rather than rejected, since this is a tuning hint and not a correctness
+    input.
 
     Returns: (results, query_variations, elapsed_ms)
     """
@@ -375,7 +395,13 @@ async def hybrid_search(
         FROM ({vec_sql}) AS deduped
     """  # nosec B608
 
-    vec_rows = await fetch_all(vec_sql, tuple(vec_params))
+    if ef_search is None:
+        vec_rows = await fetch_all(vec_sql, tuple(vec_params))
+    else:
+        clamped = max(_EF_SEARCH_MIN, min(int(ef_search), _EF_SEARCH_MAX))
+        vec_rows = await fetch_all_with_setting(
+            "hnsw.ef_search", str(clamped), vec_sql, tuple(vec_params)
+        )
 
     # --- Arm 2: Full-text search ---
 

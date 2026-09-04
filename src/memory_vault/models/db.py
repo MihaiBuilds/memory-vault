@@ -188,6 +188,35 @@ async def fetch_all(
         return await cur.fetchall()  # type: ignore[return-value]
 
 
+async def fetch_all_with_setting(
+    setting: str,
+    value: str,
+    sql: str,
+    params: tuple | dict | None = None,
+) -> list[dict[str, Any]]:
+    """Run `sql` with a Postgres setting applied for that statement only.
+
+    The setting has to be applied on the same connection that runs the query,
+    which `fetch_all` cannot do — it takes a connection from the pool, runs one
+    statement and hands it back, so a separate `SET LOCAL` call would land on a
+    different connection and be silently lost.
+
+    `set_config(..., is_local => true)` scopes the value to the surrounding
+    transaction, so it is discarded when this connection returns to the pool
+    rather than leaking into whatever query borrows it next. Verified: a
+    following pooled call reads the server default again.
+
+    `set_config` is used rather than `SET LOCAL` because the value goes through
+    as a bound parameter. `SET LOCAL` only accepts a literal, which would mean
+    interpolating a caller-supplied value into SQL.
+    """
+    pool = await get_pool()
+    async with pool.connection() as conn:
+        await conn.execute("SELECT set_config(%s, %s, true)", (setting, value))
+        cur = await conn.execute(sql, params)
+        return await cur.fetchall()  # type: ignore[return-value]
+
+
 async def has_column(table: str, column: str) -> bool:
     """
     Whether `column` exists on `table` in the connected database.
