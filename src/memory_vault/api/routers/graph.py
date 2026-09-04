@@ -25,6 +25,42 @@ router = APIRouter(prefix="/api/graph", tags=["graph"], dependencies=[Depends(re
 
 CHUNK_PREVIEW_LEN = 200
 
+# An upper bound on how many types one request may filter by. There are four
+# entity types today, but relationship types are free-form strings written by
+# the extractor, so this is not a small closed set. The cap keeps a hostile
+# caller from sending a megabyte of comma-separated values.
+MAX_TYPE_FILTERS = 50
+
+
+def parse_type_filter(raw: str | None) -> list[str] | None:
+    """Split a comma-separated `type` parameter into the types to filter by.
+
+    `?type=Person` and `?type=Person,Tool` are both valid; the single-value
+    form is just a list of one, so every existing caller keeps working and
+    there is one code path rather than two.
+
+    Returns None when there is nothing to filter by — no parameter at all, or
+    a value that is empty once separators and whitespace are removed. That is
+    deliberately the same as omitting it: `?type=` and `?type=,,` mean "no type
+    filter", not "match the empty type", which no entity has.
+
+    Duplicates are collapsed and order is preserved, so `?type=Tool,Tool`
+    binds one value rather than making the array grow with repetition.
+    """
+    if raw is None:
+        return None
+
+    seen: dict[str, None] = {}
+    for part in raw.split(","):
+        cleaned = part.strip()
+        if cleaned:
+            seen[cleaned] = None
+
+    if not seen:
+        return None
+
+    return list(seen)[:MAX_TYPE_FILTERS]
+
 
 # ---------------------------------------------------------------------------
 # /entities  —  paginated list
@@ -34,7 +70,10 @@ CHUNK_PREVIEW_LEN = 200
 @router.get("/entities", response_model=EntityList)
 async def list_entities(
     space: str | None = Query(default=None, description="Filter by space name."),
-    type: str | None = Query(default=None, description="Filter by entity type."),
+    type: str | None = Query(
+        default=None,
+        description="Filter by entity type. Comma-separated for several: Person,Tool",
+    ),
     min_mentions: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -45,15 +84,17 @@ async def list_entities(
     if space is not None:
         where.append("ms.name = %s")
         params.append(space)
-    if type is not None:
-        where.append("e.type = %s")
-        params.append(type)
+    types = parse_type_filter(type)
+    if types is not None:
+        where.append("e.type = ANY(%s)")
+        params.append(types)
 
     where_sql = " AND ".join(where) if where else "TRUE"
 
     # nosec B608 — `where_sql` is composed from a closed list of literal
-    # templates ("ms.name = %s", "e.type = %s"). User values go through %s
-    # parameters in `params`. No user-controlled SQL fragments.
+    # templates ("ms.name = %s", "e.type = ANY(%s)"). User values go through %s
+    # parameters in `params`; the type filter binds a list, so the number of
+    # values never changes the SQL text. No user-controlled SQL fragments.
     # Subquery builds entity + mention_count, then filters by min_mentions.
     # Reading mentions through live_entity_mentions keeps forgotten chunks out
     # of the count, so entities with zero live mentions drop out via HAVING.
@@ -179,7 +220,12 @@ async def get_entity(entity_id: UUID) -> EntityDetail:
 @router.get("/relationships", response_model=RelationshipList)
 async def list_relationships(
     entity_id: str | None = Query(default=None, description="Either source or target."),
-    type: str | None = Query(default=None, description="Filter by relationship type."),
+    type: str | None = Query(
+        default=None,
+        description=(
+            "Filter by relationship type. Comma-separated for several: works_on,related_to"
+        ),
+    ),
     space: str | None = Query(default=None, description="Filter by chunk's space."),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
@@ -193,9 +239,10 @@ async def list_relationships(
     if entity_id is not None:
         where.append("(r.source_entity_id = %s OR r.target_entity_id = %s)")
         params.extend([entity_id, entity_id])
-    if type is not None:
-        where.append("r.type = %s")
-        params.append(type)
+    types = parse_type_filter(type)
+    if types is not None:
+        where.append("r.type = ANY(%s)")
+        params.append(types)
     if space is not None:
         where.append(
             "r.chunk_id IN (SELECT c.id FROM chunks c "
@@ -251,7 +298,10 @@ async def list_relationships(
 @router.get("/visualize", response_model=GraphVisualization)
 async def visualize(
     space: str | None = Query(default=None),
-    type: str | None = Query(default=None),
+    type: str | None = Query(
+        default=None,
+        description="Filter by entity type. Comma-separated for several: Person,Tool",
+    ),
     min_mentions: int = Query(default=1, ge=1),
     max_nodes: int = Query(default=100, ge=1, le=500),
 ) -> GraphVisualization:
@@ -261,9 +311,10 @@ async def visualize(
     if space is not None:
         where.append("ms.name = %s")
         params.append(space)
-    if type is not None:
-        where.append("e.type = %s")
-        params.append(type)
+    types = parse_type_filter(type)
+    if types is not None:
+        where.append("e.type = ANY(%s)")
+        params.append(types)
 
     where_sql = " AND ".join(where) if where else "TRUE"
 

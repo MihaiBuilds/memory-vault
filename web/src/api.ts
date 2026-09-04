@@ -137,7 +137,11 @@ export interface EntityDetail {
 
 export interface GraphVisualizeParams {
   space?: string
-  type?: string
+  /**
+   * One entity type, or several. An array serialises comma-separated
+   * (`type=Person,Tool`), which is the form the backend splits on.
+   */
+  type?: string | string[]
   min_mentions?: number
   max_nodes?: number
 }

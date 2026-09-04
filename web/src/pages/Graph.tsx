@@ -40,6 +40,19 @@ export default function GraphPage() {
     setSearchParams(next, { replace: true })
   }
 
+  // `type` stays a comma-separated string in the URL and in the query key —
+  // the array is derived for rendering only. Keeping the string canonical
+  // means a shared link still works and the query key stays a stable scalar.
+  const selectedTypes = type ? type.split(',').filter(Boolean) : []
+
+  const toggleType = (t: string) => {
+    const next = selectedTypes.includes(t)
+      ? selectedTypes.filter((x) => x !== t)
+      : [...selectedTypes, t]
+    // Empty means "all types", which is the absent parameter.
+    updateFilters({ type: next.length ? next.join(',') : null })
+  }
+
   // Debounced copies for slider values — API call waits until user stops dragging.
   const [debouncedMinMentions, setDebouncedMinMentions] = useState(minMentions)
   const [debouncedMaxNodes, setDebouncedMaxNodes] = useState(maxNodes)
@@ -77,6 +90,8 @@ export default function GraphPage() {
         spaces={spacesQuery.data?.spaces ?? []}
         space={space}
         type={type}
+        selectedTypes={selectedTypes}
+        onToggleType={toggleType}
         minMentions={minMentions}
         maxNodes={maxNodes}
         onChange={updateFilters}
@@ -114,12 +129,23 @@ interface FilterBarProps {
   spaces: SpaceInfo[]
   space: string
   type: string
+  selectedTypes: string[]
+  onToggleType: (t: string) => void
   minMentions: number
   maxNodes: number
   onChange: (patch: Record<string, string | number | null>) => void
 }
 
-function FilterBar({ spaces, space, type, minMentions, maxNodes, onChange }: FilterBarProps) {
+function FilterBar({
+  spaces,
+  space,
+  type,
+  selectedTypes,
+  onToggleType,
+  minMentions,
+  maxNodes,
+  onChange,
+}: FilterBarProps) {
   return (
     <div className="bg-bg2 border border-border rounded-md p-3 flex flex-wrap items-center gap-4">
       <label className="flex items-center gap-2 text-sm text-text2">
@@ -138,21 +164,40 @@ function FilterBar({ spaces, space, type, minMentions, maxNodes, onChange }: Fil
         </select>
       </label>
 
-      <label className="flex items-center gap-2 text-sm text-text2">
+      {/*
+        Toggle chips rather than a native multi-select: there are four types,
+        each already has a colour on the graph, and a <select multiple> hides
+        the selection behind a scrollbox and needs ctrl-click to combine.
+        Selecting none means "all types" — the same as the old "All types"
+        option, and what the backend does with an absent filter.
+      */}
+      <div className="flex items-center gap-2 text-sm text-text2">
         Type
-        <select
-          value={type}
-          onChange={(e) => onChange({ type: e.target.value || null })}
-          className="bg-bg3 border border-border rounded-sm px-2 py-1 text-sm text-text"
-        >
-          <option value="">All types</option>
-          {ENTITY_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </label>
+        <div className="flex flex-wrap gap-1.5">
+          {ENTITY_TYPES.map((t) => {
+            const active = selectedTypes.includes(t)
+            return (
+              <button
+                key={t}
+                type="button"
+                aria-pressed={active}
+                onClick={() => onToggleType(t)}
+                className={`flex items-center gap-1.5 rounded-sm border px-2 py-1 text-xs transition-colors ${
+                  active
+                    ? 'border-accent bg-bg3 text-text'
+                    : 'border-border text-text2 hover:text-text'
+                }`}
+              >
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ backgroundColor: TYPE_COLORS[t] ?? DEFAULT_COLOR }}
+                />
+                {t}
+              </button>
+            )
+          })}
+        </div>
+      </div>
 
       <label className="flex items-center gap-2 text-sm text-text2">
         Min mentions
