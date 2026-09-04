@@ -193,6 +193,7 @@ async def recall(
     since: str | None = None,
     limit: int = 10,
     max_tokens: int = 2000,
+    ef_search: int | None = None,
 ) -> str:
     """
     Search your memories for information relevant to a query.
@@ -208,6 +209,10 @@ async def recall(
         since: Only return memories after this date (ISO format, e.g. "2025-01-01").
         limit: Maximum number of results (default 10, max 50).
         max_tokens: Token budget for results (default 2000).
+        ef_search: How much of the vector index to search, 1-1000. Omit to use
+                the default (40). Raise it when a search should have found
+                something and did not — better recall, slower query. Worth
+                trying before concluding a memory is missing.
     """
     if not await _ensure_db():
         return _dumps(
@@ -238,6 +243,7 @@ async def recall(
             space_ids=space_ids,
             since=since_dt,
             limit=limit,
+            ef_search=ef_search,
         )
 
         # Observability: memory_status reads queries_24h from query_log,

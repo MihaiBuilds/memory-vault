@@ -37,6 +37,12 @@ class SearchRequest(BaseModel):
     spaces: list[str] | None = Field(default=None, examples=[["default"]])
     since: str | None = Field(default=None, examples=["2026-01-01"])
     limit: int = Field(default=10, ge=1, le=50)
+    # HNSW search breadth for this query only. Omit to use the server default
+    # (40). Higher values search more of the index — better recall, slower
+    # query — which is worth reaching for on a large or noisy corpus. Bounded
+    # here as well as in the service so an out-of-range value is a 422 rather
+    # than a silent clamp.
+    ef_search: int | None = Field(default=None, ge=1, le=1000, examples=[100])
 
 
 class SearchHit(BaseModel):
