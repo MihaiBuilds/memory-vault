@@ -98,6 +98,74 @@ class SpaceNotFound(LookupError):
     """No space with the given name."""
 
 
+class SpaceNotEmpty(ValueError):
+    """A space that still holds memories or graph entities."""
+
+
+class SpaceReserved(ValueError):
+    """A space that may not be deleted regardless of its contents."""
+
+
+async def delete_space(name: str) -> None:
+    """Delete an empty, non-reserved space.
+
+    Refuses rather than cascades. The two foreign keys pointing at a space
+    behave differently, and neither is a safe thing to trigger by accident:
+
+    - `chunks.space_id` is ON DELETE NO ACTION, so Postgres refuses the delete
+      outright. Without a check first that surfaces as a 500 on a raw
+      IntegrityError rather than as an answer.
+    - `entities.space_id` is ON DELETE CASCADE, and entities cascade further
+      into `entity_mentions` and `relationships`. That one does not fail — it
+      silently destroys the space's whole subgraph.
+
+    So emptiness is checked against both tables. A space holding only entities
+    has no memories in it but is very much not empty, and deleting it would
+    take the graph with it.
+
+    Chunks are counted unfiltered, unlike the `chunk_count` in the space list,
+    which counts only live ones. A space whose memories have all been forgotten
+    displays as empty while its rows are still present, and those rows still
+    trip the foreign key. Counting what the UI shows would let this pass its
+    own check and then fail in the database.
+    """
+    if name in RESERVED_SPACE_NAMES:
+        raise SpaceReserved(f"Space name is reserved: {name}")
+
+    space_id = await get_space_id(name)
+    if space_id is None:
+        raise SpaceNotFound(f"Unknown space: {name}")
+
+    # Counting and deleting in one transaction, so an ingest landing between
+    # the two cannot turn a passed check into a foreign-key error. The row is
+    # locked first: without it the count is a snapshot that another session is
+    # free to invalidate before the DELETE runs.
+    pool = await get_pool()
+    async with pool.connection() as conn:
+        async with conn.transaction():
+            await conn.execute("SELECT id FROM memory_spaces WHERE id = %s FOR UPDATE", (space_id,))
+
+            cur = await conn.execute(
+                """SELECT (SELECT COUNT(*) FROM chunks WHERE space_id = %s) AS chunks,
+                          (SELECT COUNT(*) FROM entities WHERE space_id = %s) AS entities""",
+                (space_id, space_id),
+            )
+            counts = await cur.fetchone()
+            chunk_count = int(counts["chunks"])
+            entity_count = int(counts["entities"])
+
+            if chunk_count or entity_count:
+                raise SpaceNotEmpty(
+                    f"Space is not empty: {name} "
+                    f"({chunk_count} memories, {entity_count} graph entities). "
+                    "Move or delete its contents first."
+                )
+
+            await conn.execute("DELETE FROM memory_spaces WHERE id = %s", (space_id,))
+
+    logger.info("Space deleted: %s", _sanitized_for_log(name))
+
+
 async def move_chunk(chunk_id: str, target_space: str) -> dict[str, Any]:
     """Move a chunk into `target_space`, keeping its graph entries consistent.
 

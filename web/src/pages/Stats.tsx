@@ -1,4 +1,5 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api } from '../api'
 
 export default function StatsPage() {
@@ -26,6 +27,27 @@ export default function StatsPage() {
     qc.invalidateQueries({ queryKey: ['health'] })
     qc.invalidateQueries({ queryKey: ['spaces'] })
   }
+
+  // Two-step delete: the first click arms the space, the second confirms.
+  // Deleting a space is not undoable, and a stray click on a row in a list is
+  // an easy mistake to make.
+  const [armed, setArmed] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const deleteSpace = useMutation({
+    mutationFn: (name: string) => api.deleteSpace(name),
+    onSuccess: () => {
+      setArmed(null)
+      setDeleteError(null)
+      qc.invalidateQueries({ queryKey: ['spaces'] })
+    },
+    onError: (e) => {
+      setArmed(null)
+      // The server's message says what is blocking — how many memories and
+      // how many graph entities — which is more use than "could not delete".
+      setDeleteError(e instanceof ApiError ? e.message : 'Could not delete the space.')
+    },
+  })
 
   const error = healthQuery.error || spacesQuery.error
 
@@ -76,6 +98,11 @@ export default function StatsPage() {
 
       <div className="rounded-lg border border-border bg-bg2 p-4">
         <h2 className="text-xs uppercase tracking-wider text-text2 mb-3">Spaces</h2>
+        {deleteError && (
+          <p className="mb-3 rounded-sm border border-red-900 bg-red-950/40 px-3 py-2 text-xs text-red-300">
+            {deleteError}
+          </p>
+        )}
         {spacesQuery.isPending ? (
           <p className="text-sm text-text2">Loading…</p>
         ) : spaces.length === 0 ? (
@@ -84,10 +111,40 @@ export default function StatsPage() {
           <ul className="space-y-3">
             {spaces.map((s) => (
               <li key={s.name} className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center justify-between text-sm gap-3">
                   <span className="text-text font-medium">{s.name}</span>
-                  <span className="text-text2 text-xs">
-                    {s.chunk_count.toLocaleString()} chunk{s.chunk_count === 1 ? '' : 's'}
+                  <span className="flex items-center gap-3">
+                    <span className="text-text2 text-xs">
+                      {s.chunk_count.toLocaleString()} chunk{s.chunk_count === 1 ? '' : 's'}
+                    </span>
+                    {armed === s.name ? (
+                      <span className="flex items-center gap-2">
+                        <button
+                          onClick={() => deleteSpace.mutate(s.name)}
+                          disabled={deleteSpace.isPending}
+                          className="text-xs text-red-400 hover:text-red-300 underline disabled:opacity-50"
+                        >
+                          {deleteSpace.isPending ? 'Deleting…' : 'Confirm'}
+                        </button>
+                        <button
+                          onClick={() => setArmed(null)}
+                          className="text-xs text-text2 hover:text-text underline"
+                        >
+                          Cancel
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setDeleteError(null)
+                          setArmed(s.name)
+                        }}
+                        className="text-xs text-text2 hover:text-red-400"
+                        aria-label={`Delete space ${s.name}`}
+                      >
+                        Delete
+                      </button>
+                    )}
                   </span>
                 </div>
                 <div className="h-1.5 rounded-sm bg-bg overflow-hidden">
