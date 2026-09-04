@@ -342,8 +342,11 @@ class TestConcurrentIngestDuringDelete:
         with pytest.raises(SpaceNotEmpty):
             await delete_space("race1")
 
-        await holder
-        assert chunk_written.is_set()
+        # Awaited, not abandoned: this is what re-raises anything the writer
+        # hit. A task whose exception is never retrieved is swallowed, and the
+        # test would pass whether or not the chunk was ever written.
+        await asyncio.wait_for(holder, timeout=5)
+        assert chunk_written.is_set(), "the racing writer never inserted its chunk"
 
         assert await fetch_one("SELECT id FROM memory_spaces WHERE name = 'race1'") is not None, (
             "the space must survive: a chunk was written before the delete could commit"
