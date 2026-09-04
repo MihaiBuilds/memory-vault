@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+import time
 
 from memory_vault.logging_config import configure_logging
 
@@ -46,6 +47,12 @@ def main() -> None:
 
     # migrate
     sub.add_parser("migrate", help="Run database migrations")
+
+    # warm-index
+    sub.add_parser(
+        "warm-index",
+        help="Touch the vector index so the first real search does not page it in",
+    )
 
     # purge-forgotten
     p_purge = sub.add_parser(
@@ -114,6 +121,8 @@ def main() -> None:
 
     if args.command == "migrate":
         asyncio.run(_cmd_migrate())
+    elif args.command == "warm-index":
+        asyncio.run(_cmd_warm_index())
     elif args.command == "purge-forgotten":
         asyncio.run(_cmd_purge_forgotten(args.older_than))
     elif args.command == "ingest":
@@ -146,6 +155,49 @@ def main() -> None:
         from memory_vault.diagnose import cli_diagnose
 
         cli_diagnose(Path(args.out_dir) if args.out_dir else None)
+
+
+# Named rather than inlined so the test can EXPLAIN the exact statement the
+# command runs. Asserting on a copy of the SQL would keep passing if this one
+# stopped using the index.
+WARM_INDEX_SQL = "SELECT id FROM chunks ORDER BY embedding <=> %s::vector LIMIT 1"
+
+
+async def _cmd_warm_index() -> None:
+    """Run one nearest-neighbour query so the HNSW index is paged in.
+
+    Without this the first real search after a start pays to read the index off
+    disk, which on a large corpus is the slowest query anyone will run — and it
+    lands on a user rather than on start-up.
+
+    A KNN query is used rather than `pg_prewarm`, which is available in the
+    pgvector image but not installed: using it would mean CREATE EXTENSION,
+    which the least-privilege application role cannot do. This needs no
+    privileges beyond the SELECT the app already has.
+
+    Never fails the caller. Warming is an optimisation, and a container that
+    refuses to start because an optimisation did not work is worse than a
+    slightly slow first query. `scripts/start.sh` relies on that.
+    """
+    from memory_vault.config import settings
+    from memory_vault.models.db import close_pool, fetch_all, init_pool
+
+    try:
+        await init_pool()
+    except Exception as e:
+        print(f"Index warm-up skipped (database unavailable): {e}")
+        return
+
+    try:
+        zero_vector = "[" + ",".join(["0"] * settings.embedding_dimensions) + "]"
+        start = time.perf_counter()
+        await fetch_all(WARM_INDEX_SQL, (zero_vector,))
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+        print(f"Vector index warmed in {elapsed_ms} ms.")
+    except Exception as e:
+        print(f"Index warm-up skipped: {e}")
+    finally:
+        await close_pool()
 
 
 async def _cmd_purge_forgotten(older_than_days: int) -> None:

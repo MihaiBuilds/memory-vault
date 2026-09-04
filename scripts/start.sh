@@ -32,6 +32,13 @@ done
 echo "Running migrations..."
 memory-vault migrate
 
+# Page the vector index in, so the first real search is not the one that pays
+# to read it off disk. `|| true` is belt and braces: the command already
+# swallows its own failures, but this script runs under `set -e` and warming is
+# an optimisation, never a reason to refuse to start.
+echo "Warming vector index..."
+memory-vault warm-index || true
+
 # Show status
 echo ""
 memory-vault status
