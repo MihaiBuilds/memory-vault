@@ -157,6 +157,38 @@ class IngestResponse(BaseModel):
     message: str
 
 
+class IngestFileResult(BaseModel):
+    """What happened to one file in a batch upload.
+
+    No per-file chunk count: the pipeline accumulates chunks across the batch
+    and does not attribute them per job, so the only honest number is the
+    batch total on the response. Reporting a per-file zero would read as "this
+    file produced nothing" for files that produced plenty.
+    """
+
+    filename: str
+    stored: bool
+    error: str | None = Field(
+        default=None,
+        description="Why this file was not ingested. Absent when it succeeded.",
+    )
+
+
+class IngestFilesResponse(BaseModel):
+    """Per-file outcomes for a batch upload.
+
+    Reported per file rather than as a single verdict: a batch where one file
+    is malformed should still store the rest, and the caller needs to know
+    which one to fix rather than being told the upload failed.
+    """
+
+    files: list[IngestFileResult]
+    files_succeeded: int
+    files_failed: int
+    chunks_created: int
+    message: str
+
+
 # ---------------------------------------------------------------------------
 # Knowledge graph
 # ---------------------------------------------------------------------------
