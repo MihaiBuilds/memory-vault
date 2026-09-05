@@ -82,6 +82,8 @@ export interface IngestResponse {
 
 export interface ListChunksParams {
   space?: string
+  /** Only chunks mentioning this knowledge-graph entity. */
+  entity_id?: string
   limit?: number
   offset?: number
   sort?: 'recent' | 'importance'

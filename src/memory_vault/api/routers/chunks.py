@@ -44,6 +44,10 @@ def _row_to_summary(row: dict) -> ChunkSummary:
 @router.get("/chunks", response_model=ChunkList)
 async def list_chunks(
     space: str | None = Query(default=None, description="Filter by space name"),
+    entity_id: UUID | None = Query(
+        default=None,
+        description="Only chunks that mention this knowledge-graph entity.",
+    ),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     sort: str = Query(default="recent", pattern="^(recent|importance)$"),
@@ -59,6 +63,25 @@ async def list_chunks(
     if space:
         where.append("ms.name = %s")
         params.append(space)
+
+    if entity_id is not None:
+        # EXISTS rather than a join. Since #110 an entity gets one mention row
+        # per occurrence, so a chunk naming it three times joins to three rows
+        # — the same chunk three times in the list and a count inflated past
+        # the number of chunks that exist. EXISTS asks the question actually
+        # being asked ("is it mentioned here at all") and stops at the first
+        # hit, so no DISTINCT is needed and the row shape is unchanged.
+        #
+        # `entity_mentions` directly, not the `live_entity_mentions` view: the
+        # view hardcodes `forgotten IS NOT TRUE`, which would quietly override
+        # `include_forgotten=true` for entity-filtered queries only. Forgotten
+        # chunks stay hidden by default through the clause above, so the two
+        # parameters keep agreeing.
+        where.append(
+            "EXISTS (SELECT 1 FROM entity_mentions em "
+            "WHERE em.chunk_id = c.id AND em.entity_id = %s)"
+        )
+        params.append(entity_id)
 
     where_sql = "WHERE " + " AND ".join(where) if where else ""
     order_sql = (

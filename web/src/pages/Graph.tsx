@@ -550,6 +550,17 @@ function SidePanel({ entityId, onClose }: SidePanelProps) {
             space: {entity.space} · {entity.mention_count}{' '}
             {entity.mention_count === 1 ? 'mention' : 'mentions'}
           </div>
+          {/*
+            The graph shows that an entity matters; this is the way to the
+            memories it came from. The name rides along so Browse can label
+            the filter without a second request.
+          */}
+          <Link
+            to={`/browse?entity_id=${encodeURIComponent(entity.id)}&entity_name=${encodeURIComponent(entity.name)}`}
+            className="inline-block mt-2 text-xs text-accent hover:underline"
+          >
+            Read these memories →
+          </Link>
         </div>
         <button
           onClick={onClose}
