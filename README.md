@@ -609,6 +609,7 @@ The [GitHub contributor list](https://github.com/MihaiBuilds/memory-vault/graphs
 
 - **Leonard Janke (lcjanke2020), working with GPT-5.6-Sol through OpenAI Codex** ([@lcj-codex-coder](https://github.com/lcj-codex-coder)) — 20+ issues reported across the v1.0.7–v1.0.10 window, spanning version-drift, MCP correctness, timezone handling, embedding-dimension validation, and knowledge-graph soft-delete semantics. Peer-tier diagnostics; every report came with a disposable-database reproduction.
 - **[@git-pharos](https://github.com/git-pharos)** — diagnostic bundle in [#74](https://github.com/MihaiBuilds/memory-vault/issues/74) that exposed three underlying issues fixed in v1.0.7.
+- **Rivestack** — the per-query `ef_search` knob and warming the vector index at start-up, both shipped in v1.5.0. Operational pgvector experience: the kind of default that is fine in a demo and wrong at scale.
 
 Security reports and correctness findings are always credited by handle, plus any format the reporter specified — including tooling attribution where requested.
 
