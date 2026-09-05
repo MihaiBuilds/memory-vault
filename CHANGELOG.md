@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-09-05
+
+Eight additions, most of them about doing something with a graph you have
+already built: reading the memories behind a node, filtering by more than one
+type at a time, and merging the entities that extraction split apart. Plus a
+Windows fix that had been waiting on a reproduction.
+
+Nothing here requires action on upgrade. Every new parameter is optional, and
+every existing call behaves as it did.
+
+### Added
+
+- **Merge entities the extractor kept apart.** Extraction is literal and
+  per-occurrence, so one person arrives as "Alice", "Alice Smith" and
+  "A. Smith". `POST /api/graph/entities/merge` folds one into another in a
+  single transaction. Deciding that two entities are the same is a judgement
+  call, so it is offered rather than guessed at. Merging across spaces is
+  refused: entities are per-space by design, and a cross-space merge would move
+  data between spaces without saying so.
+- **Read the memories behind a graph node.** `GET /api/chunks?entity_id=…`
+  returns the chunks that mention an entity, and the graph's node panel links
+  into Browse with that filter applied. The node used to be a dead end — you
+  could see that something mattered and how often it came up, but not read what
+  it came from.
+- **Filter the graph by several types at once.** `?type=Person,Tool` on the
+  entity, relationship and visualization endpoints. Selecting two types meant
+  two requests and no way to see both together. A single value still behaves
+  exactly as before.
+- **Delete a space.** `DELETE /api/spaces/{name}` removes one that holds
+  nothing, with a two-step delete on the dashboard. Spaces could be created but
+  never removed, so a typo was permanent. A space with contents is refused
+  rather than emptied — and "empty" means no memories *and* no graph entities,
+  since deleting a space cascades into its entities.
+- **Upload several files in one request.** `POST /api/ingest/files` answers per
+  file: one malformed file in a batch of thirty does not discard the other
+  twenty-nine, and the response says which one to fix. Bounded per file, in
+  aggregate, and by count.
+- **Tune search breadth per query.** `ef_search` on `/api/search` and the MCP
+  `recall` tool widens the HNSW search for one query without changing the
+  server default for everyone. Bounded 1–1000.
+- **The vector index is warmed at start-up.** `memory-vault warm-index` runs
+  after migrations, so the first real search is not the one that pays to read
+  the index off disk. Warming never blocks start-up: a container that refuses to
+  start because an optimisation failed is worse than a slow first query.
+
+### Fixed
+
+- **Memory Vault now starts cleanly on Windows.** Windows defaults to an event
+  loop psycopg refuses to use, so every connection attempt failed instantly and
+  the pool retried — a burst of identical warnings and a multi-second delay
+  before anything worked. A compatible loop is now selected at import.
+  Reproduced on Windows 11 beforehand and measured after: three warnings and a
+  pool timeout became zero warnings. Other platforms are untouched. ([#77])
+
+### Contributors
+
+- Rivestack suggested both the per-query `ef_search` knob and warming the vector
+  index at start-up.
+
+[#77]: https://github.com/MihaiBuilds/memory-vault/issues/77
+
 ## [1.4.0] — 2026-08-23
 
 Ten bug fixes and one new capability. Most of these are the kind that only
