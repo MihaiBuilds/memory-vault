@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -192,6 +193,40 @@ class IngestFilesResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Knowledge graph
 # ---------------------------------------------------------------------------
+
+
+class EntityMergeRequest(BaseModel):
+    """Fold one entity into another.
+
+    Both must be in the same space. The loser is deleted; everything pointing
+    at it is repointed at the winner.
+    """
+
+    winner_id: UUID = Field(description="The entity to keep.")
+    loser_id: UUID = Field(description="The entity to fold in and delete.")
+
+
+class EntityMergeResponse(BaseModel):
+    winner_id: str
+    winner_name: str
+    merged_name: str = Field(description="Name of the entity that was folded in.")
+    mentions_moved: int
+    relationships_moved: int
+    duplicate_mentions_dropped: int = Field(
+        default=0,
+        description=(
+            "Mentions discarded because the winner already had one at the same "
+            "place in the same memory."
+        ),
+    )
+    self_relationships_dropped: int = Field(
+        default=0,
+        description=(
+            "Relationships between the two entities, discarded because after "
+            "merging they would point an entity at itself."
+        ),
+    )
+    message: str
 
 
 class EntitySummary(BaseModel):
