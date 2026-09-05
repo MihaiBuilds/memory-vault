@@ -80,6 +80,23 @@ export interface IngestResponse {
   message: string
 }
 
+/** One file's outcome in a batch upload. */
+export interface IngestFileResult {
+  filename: string
+  stored: boolean
+  /** Why it was not ingested. Null when it succeeded. */
+  error: string | null
+}
+
+export interface IngestFilesResponse {
+  files: IngestFileResult[]
+  files_succeeded: number
+  files_failed: number
+  /** Batch total — the pipeline does not attribute chunks per file. */
+  chunks_created: number
+  message: string
+}
+
 export interface ListChunksParams {
   space?: string
   /** Only chunks mentioning this knowledge-graph entity. */
@@ -282,6 +299,25 @@ export const api = {
     form.append('file', file)
     form.append('space', space)
     return request<IngestResponse>('/api/ingest/file', {
+      method: 'POST',
+      body: form,
+    })
+  },
+
+  /**
+   * Upload several files in one request, answering per file.
+   *
+   * The Ingest page deliberately still uploads one at a time: it shows each
+   * file flipping to done with its own chunk count, and a single batch call
+   * would leave that list frozen until everything finished. This is for
+   * callers importing a folder programmatically, where one round trip beats
+   * fifty.
+   */
+  ingestFiles: (files: File[], space: string = 'default') => {
+    const form = new FormData()
+    for (const file of files) form.append('files', file)
+    form.append('space', space)
+    return request<IngestFilesResponse>('/api/ingest/files', {
       method: 'POST',
       body: form,
     })
