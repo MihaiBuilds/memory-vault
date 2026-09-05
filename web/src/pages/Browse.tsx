@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, api } from '../api'
 
@@ -11,17 +12,32 @@ export default function BrowsePage() {
   const [offset, setOffset] = useState(0)
   const [confirmId, setConfirmId] = useState<string | null>(null)
 
+  // The entity filter lives in the URL rather than in state: it arrives as a
+  // link from a graph node, so it has to survive a navigation and be
+  // shareable. The other filters stay local — nothing links to them.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const entityId = searchParams.get('entity_id') ?? ''
+  const entityName = searchParams.get('entity_name') ?? ''
+
+  const clearEntityFilter = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('entity_id')
+    next.delete('entity_name')
+    setSearchParams(next, { replace: true })
+  }
+
   const spacesQuery = useQuery({
     queryKey: ['spaces'],
     queryFn: () => api.listSpaces(),
   })
 
-  const chunksKey = ['chunks', { space, sort, offset }] as const
+  const chunksKey = ['chunks', { space, sort, offset, entityId }] as const
   const chunksQuery = useQuery({
     queryKey: chunksKey,
     queryFn: () =>
       api.listChunks({
         space: space || undefined,
+        entity_id: entityId || undefined,
         sort,
         limit: PAGE_SIZE,
         offset,
@@ -41,7 +57,7 @@ export default function BrowsePage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOffset(0)
-  }, [space, sort])
+  }, [space, sort, entityId])
 
   useEffect(() => {
     if (!confirmId) return
@@ -65,6 +81,23 @@ export default function BrowsePage() {
 
   return (
     <div className="space-y-4">
+      {entityId && (
+        // Arriving from a graph node, the filter is invisible otherwise — the
+        // list would just look mysteriously short. The name comes along in the
+        // link so the banner can be shown without a second request.
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-accent bg-bg2 px-4 py-2 text-sm">
+          <span className="text-text2">
+            Memories mentioning{' '}
+            <span className="text-text font-medium">{entityName || 'this entity'}</span>
+          </span>
+          <button
+            onClick={clearEntityFilter}
+            className="text-xs text-text2 underline hover:text-text"
+          >
+            Clear
+          </button>
+        </div>
+      )}
       <div className="rounded-lg border border-border bg-bg2 p-4">
         <div className="flex flex-wrap gap-2">
           <select
