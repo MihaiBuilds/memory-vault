@@ -11,6 +11,8 @@ from memory_vault.api.schemas import (
     EntityDetail,
     EntityList,
     EntityMention,
+    EntityMergeRequest,
+    EntityMergeResponse,
     EntitySummary,
     GraphEdge,
     GraphNode,
@@ -20,6 +22,12 @@ from memory_vault.api.schemas import (
     RelationshipRow,
 )
 from memory_vault.models.db import fetch_all, fetch_one
+from memory_vault.services.graph import (
+    CrossSpaceMerge,
+    EntityNotFound,
+    SameEntityMerge,
+    merge_entities,
+)
 
 router = APIRouter(prefix="/api/graph", tags=["graph"], dependencies=[Depends(require_token)])
 
@@ -130,6 +138,49 @@ async def list_entities(
     ]
 
     return EntityList(entities=entities, total=total, limit=limit, offset=offset)
+
+
+# ---------------------------------------------------------------------------
+# /entities/merge  —  fold one entity into another
+#
+# Declared before /entities/{entity_id} so the intent is obvious at a glance.
+# They do not actually collide — this is a POST and that a GET, and the path
+# parameter is typed UUID — but a reader should not have to work that out.
+# ---------------------------------------------------------------------------
+
+
+@router.post("/entities/merge", response_model=EntityMergeResponse)
+async def merge_entities_endpoint(req: EntityMergeRequest) -> EntityMergeResponse:
+    """Fold one entity into another.
+
+    Extraction is literal and per-occurrence, so one real thing often ends up
+    as several entities — "Alice", "Alice Smith", "A. Smith". Deciding those
+    are the same is a judgement call, so it is offered rather than guessed.
+    """
+    try:
+        result = await merge_entities(req.winner_id, req.loser_id)
+    except SameEntityMerge as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    except EntityNotFound as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except CrossSpaceMerge as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+
+    dropped = []
+    if result["duplicate_mentions_dropped"]:
+        dropped.append(f"{result['duplicate_mentions_dropped']} duplicate mentions")
+    if result["self_relationships_dropped"]:
+        dropped.append(f"{result['self_relationships_dropped']} self-relationships")
+    tail = f" ({', '.join(dropped)} dropped)" if dropped else ""
+
+    return EntityMergeResponse(
+        **result,
+        message=(
+            f"Merged '{result['merged_name']}' into '{result['winner_name']}': "
+            f"{result['mentions_moved']} mentions, "
+            f"{result['relationships_moved']} relationship endpoints{tail}"
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
