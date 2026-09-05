@@ -36,10 +36,17 @@ import asyncio
 import subprocess
 import sys
 import textwrap
+from pathlib import Path
 
 import pytest
 
+from memory_vault import __file__ as _package_file
 from memory_vault import _use_selector_event_loop_on_windows
+
+# Where the installed package lives. Derived once, in the same `from` style as
+# the import above: mixing `from x import y` with `import x` in one file is
+# something the code-quality bot flags and ruff does not catch.
+PACKAGE_DIR = Path(_package_file).parent
 
 
 class TestOnThisPlatform:
@@ -95,6 +102,14 @@ class TestItIsWiredIntoImport:
         """
         code = textwrap.dedent("""
             import asyncio, sys
+
+            # Warm the stdlib BEFORE faking the platform. Modules imported
+            # after the lie take their Windows branches: on 3.13 `shutil`
+            # does `import _winapi` at module level, which does not exist on
+            # Linux, so importing anything afterwards dies with
+            # ModuleNotFoundError. 3.11 imports it lazily and survived, which
+            # is why this only failed on one of the two CI versions.
+            import importlib.metadata, shutil, zipfile  # noqa: F401
 
             class FakeSelectorPolicy(asyncio.DefaultEventLoopPolicy):
                 pass
@@ -203,11 +218,8 @@ class TestTheReasonTheFixIsSafe:
     """
 
     def test_no_module_uses_asyncio_subprocesses(self):
-        from pathlib import Path
-
-        src = Path(__import__("memory_vault").__file__).parent
         offenders = []
-        for path in src.rglob("*.py"):
+        for path in PACKAGE_DIR.rglob("*.py"):
             text = path.read_text(encoding="utf-8")
             if "create_subprocess_exec" in text or "create_subprocess_shell" in text:
                 offenders.append(path.name)
@@ -220,11 +232,7 @@ class TestTheReasonTheFixIsSafe:
     def test_diagnose_uses_the_synchronous_subprocess_api(self):
         """`subprocess.run` is unaffected by the event loop — verified on
         Windows, where it returned 42 under the selector policy."""
-        from pathlib import Path
-
-        import memory_vault
-
-        diagnose = Path(memory_vault.__file__).parent / "diagnose.py"
+        diagnose = PACKAGE_DIR / "diagnose.py"
         if not diagnose.exists():  # pragma: no cover - defensive
             pytest.skip("diagnose.py not present")
 
