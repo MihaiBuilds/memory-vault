@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The MCP server introduced itself without a version.** Clients that show a
+  server list displayed Memory Vault with an empty version string — the SDK
+  defaults it to empty and nothing was passing one. It now reports the
+  installed version, read from the package so it cannot drift from the
+  version bump a release already does.
+
 ## [1.5.0] — 2026-09-05
 
 Eight additions, most of them about doing something with a graph you have

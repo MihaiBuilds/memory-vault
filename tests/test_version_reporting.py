@@ -74,3 +74,20 @@ def test_diagnose_read_version_matches_installed():
     from memory_vault.diagnose import _read_version
 
     assert _read_version() == __version__
+
+
+def test_mcp_server_reports_installed_version():
+    """
+    The version an MCP client sees in `initialize` — the name and version a
+    client shows in its server list.
+
+    This surface was missing from this file, and consequently shipped an empty
+    version from at least v1.4.0: `MCPServer` defaults `version` to `""`, and
+    nothing passed one. Confirmed on both the published Docker image and a
+    plain pip install, so it was the code path rather than packaging.
+    """
+    from memory_vault.mcp.server import mcp
+
+    assert mcp.version == __version__, (
+        f"MCP clients would show version {mcp.version!r}; expected {__version__!r}"
+    )
