@@ -17,7 +17,14 @@ import os
 from starlette.applications import Starlette
 
 from memory_vault.config import env_str
-from memory_vault.mcp.auth import MCP_SCOPE, DatabaseTokenVerifier
+
+# `memory_vault.mcp.auth` is imported inside `build_mcp_http_app`, not here.
+# It reads the token lookup from `memory_vault.api.deps`, and
+# `memory_vault/api/__init__.py` eagerly imports `create_app`, which imports
+# this module — so importing it at module scope makes
+# `import memory_vault.mcp.http_transport` fail with a circular import. It
+# only shows up when this module is imported *first*; every test reached it
+# through the app, which is why nothing caught it.
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +40,40 @@ MCP_MOUNT_PATH = "/api/mcp"
 # `memory-vault token create` rather than through an OAuth flow, so no client
 # ever visits the issuer. It has to be a well-formed URL, not a real endpoint.
 _DEFAULT_PUBLIC_URL = "http://127.0.0.1:8000"
+
+# Hostnames the transport will answer to. The SDK rejects any request whose
+# Host header is not on this list with HTTP 421, which is DNS-rebinding
+# protection: without it, a page in a browser could resolve its own domain to
+# 127.0.0.1 and reach a local memory store through the victim's machine.
+#
+# The default covers a client on the same machine. Anything else — a container
+# name, a LAN address, a hostname behind a reverse proxy — has to be declared,
+# because the whole point of the check is that the server knows which names
+# are legitimately its own. Found the hard way: an end-to-end client reaching
+# the server as `e2eapi:8000` got 421 while every test passed, because the
+# tests reached it as 127.0.0.1.
+_DEFAULT_ALLOWED_HOSTS = ("127.0.0.1", "127.0.0.1:*", "localhost", "localhost:*")
+
+
+def allowed_hosts() -> list[str]:
+    """Hostnames the MCP transport will answer to.
+
+    `MCP_HTTP_ALLOWED_HOSTS` is a comma-separated list, and it *replaces* the
+    localhost default rather than extending it — an operator naming their
+    hosts is stating the complete set, and silently keeping localhost in it
+    would make the setting mean something other than what it says. Add
+    `localhost` explicitly to keep it.
+
+    A `host:*` entry matches that host on any port, which the SDK supports and
+    is usually what an operator wants when the port is assigned by a
+    scheduler.
+    """
+    raw = os.getenv("MCP_HTTP_ALLOWED_HOSTS")
+    if raw is None or not raw.strip():
+        return list(_DEFAULT_ALLOWED_HOSTS)
+
+    hosts = [h.strip() for h in raw.split(",") if h.strip()]
+    return hosts or list(_DEFAULT_ALLOWED_HOSTS)
 
 
 def http_transport_enabled() -> bool:
@@ -71,7 +112,9 @@ def build_mcp_http_app() -> Starlette:
     # is wasted work for the common case where the transport is disabled.
     from mcp.server.auth.settings import AuthSettings
     from mcp.server.mcpserver import MCPServer
+    from mcp.server.transport_security import TransportSecuritySettings
 
+    from memory_vault.mcp.auth import MCP_SCOPE, DatabaseTokenVerifier
     from memory_vault.mcp.server import (
         forget,
         memory_status,
@@ -116,7 +159,17 @@ def build_mcp_http_app() -> Starlette:
     for tool in (recall, remember, forget, purge_forgotten, move_memory, memory_status):
         http_server.add_tool(tool)
 
-    return http_server.sse_app()
+    # DNS-rebinding protection stays on; the operator says which names are
+    # theirs. Origins mirror the host list so a browser-based client can reach
+    # the transport from the same names it connects to.
+    hosts = allowed_hosts()
+    security = TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=hosts,
+        allowed_origins=[f"http://{h}" for h in hosts] + [f"https://{h}" for h in hosts],
+    )
+
+    return http_server.sse_app(transport_security=security)
 
 
 def mount_mcp_http(app) -> bool:
