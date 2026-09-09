@@ -33,12 +33,14 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from memory_vault.api.app import create_app
-from memory_vault.mcp.http_transport import (
-    MCP_MOUNT_PATH,
-    build_mcp_http_app,
-    http_transport_enabled,
-)
+# Whole modules rather than a mix of styles: several tests need to patch
+# module attributes (`__file__`, `build_mcp_http_app`), and importing one
+# module both ways in a file is something the code-quality bot flags and ruff
+# does not catch.
+from memory_vault.api import app as app_module
+from memory_vault.mcp import http_transport
+
+MCP_MOUNT_PATH = http_transport.MCP_MOUNT_PATH
 
 
 def _route_paths(app) -> list[str]:
@@ -60,7 +62,7 @@ async def _client(app) -> httpx.AsyncClient:
 class TestOffByDefault:
     def test_the_flag_is_off_when_unset(self, monkeypatch):
         monkeypatch.delenv("MCP_HTTP_ENABLED", raising=False)
-        assert http_transport_enabled() is False
+        assert http_transport.http_transport_enabled() is False
 
     def test_an_empty_value_counts_as_unset(self, monkeypatch):
         """
@@ -69,29 +71,29 @@ class TestOffByDefault:
         of machine-written config, not an edge case.
         """
         monkeypatch.setenv("MCP_HTTP_ENABLED", "")
-        assert http_transport_enabled() is False
+        assert http_transport.http_transport_enabled() is False
 
     @pytest.mark.parametrize("falsey", ["false", "False", "0", "no", "NO"])
     def test_falsey_values_keep_it_off(self, monkeypatch, falsey):
         monkeypatch.setenv("MCP_HTTP_ENABLED", falsey)
-        assert http_transport_enabled() is False
+        assert http_transport.http_transport_enabled() is False
 
     @pytest.mark.parametrize("truthy", ["true", "True", "1", "yes", "on"])
     def test_anything_else_turns_it_on(self, monkeypatch, truthy):
         monkeypatch.setenv("MCP_HTTP_ENABLED", truthy)
-        assert http_transport_enabled() is True
+        assert http_transport.http_transport_enabled() is True
 
     def test_the_app_has_no_mcp_routes_by_default(self, monkeypatch):
         monkeypatch.delenv("MCP_HTTP_ENABLED", raising=False)
 
-        assert _is_mounted(create_app()) is False, (
+        assert _is_mounted(app_module.create_app()) is False, (
             "a memory store must not start listening for MCP unless asked"
         )
 
     def test_the_mount_appears_when_enabled(self, monkeypatch):
         monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
 
-        assert _is_mounted(create_app()) is True
+        assert _is_mounted(app_module.create_app()) is True
 
 
 class TestTheAuthFlagDoesNotReachIt:
@@ -105,7 +107,7 @@ class TestTheAuthFlagDoesNotReachIt:
     async def test_rest_is_open_but_mcp_is_not(self, monkeypatch):
         monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
         monkeypatch.setenv("API_AUTH_ENABLED", "false")
-        app = create_app()
+        app = app_module.create_app()
 
         async with await _client(app) as client:
             rest = await client.get("/api/spaces")
@@ -117,7 +119,7 @@ class TestTheAuthFlagDoesNotReachIt:
     async def test_a_bad_token_is_refused_with_auth_disabled(self, monkeypatch):
         monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
         monkeypatch.setenv("API_AUTH_ENABLED", "false")
-        app = create_app()
+        app = app_module.create_app()
 
         async with await _client(app) as client:
             r = await client.get(
@@ -131,7 +133,7 @@ class TestUnauthenticatedRequestsAreRefused:
     @pytest.mark.parametrize("path", ["/sse", "/messages/"])
     async def test_no_token_is_401(self, monkeypatch, path):
         monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
-        app = create_app()
+        app = app_module.create_app()
 
         async with await _client(app) as client:
             r = await client.get(f"{MCP_MOUNT_PATH}{path}")
@@ -146,7 +148,7 @@ class TestUnauthenticatedRequestsAreRefused:
         and someone reading a 307 in a log should not think auth was skipped.
         """
         monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
-        app = create_app()
+        app = app_module.create_app()
 
         async with await _client(app) as client:
             redirect = await client.get(f"{MCP_MOUNT_PATH}/messages")
@@ -162,7 +164,7 @@ class TestUnauthenticatedRequestsAreRefused:
     )
     async def test_malformed_authorization_headers_are_refused(self, monkeypatch, header):
         monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
-        app = create_app()
+        app = app_module.create_app()
 
         async with await _client(app) as client:
             r = await client.get(
@@ -191,7 +193,7 @@ class TestUnauthenticatedRequestsAreRefused:
         that stops wrapping an endpoint is caught even if some other layer
         happens to return 401.
         """
-        app = build_mcp_http_app()
+        app = http_transport.build_mcp_http_app()
 
         guarded = {}
         for route in app.routes:
@@ -231,8 +233,6 @@ class TestTheSpaFallbackDoesNotSwallowIt:
         """
         from pathlib import Path
 
-        import memory_vault.api.app as app_module
-
         source = Path(app_module.__file__).read_text(encoding="utf-8")
 
         assert 'full_path.startswith(("api/"' in source, (
@@ -251,8 +251,6 @@ class TestTheSpaFallbackDoesNotSwallowIt:
         and therefore asserted nothing at all. Mutation caught it: moving the
         mount after the fallback left all tests green.
         """
-        import memory_vault.api.app as app_module
-
         # `create_app` derives the static directory from the module's own
         # `__file__`, so pointing that at a scratch directory is enough — and
         # is far less invasive than patching pathlib itself.
@@ -263,7 +261,7 @@ class TestTheSpaFallbackDoesNotSwallowIt:
         monkeypatch.setattr(app_module, "__file__", str(fake_package / "app.py"))
         monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
 
-        app = create_app()
+        app = app_module.create_app()
 
         paths = _route_paths(app)
         catch_all = next((i for i, p in enumerate(paths) if "full_path" in p), None)
@@ -279,7 +277,7 @@ class TestTheSpaFallbackDoesNotSwallowIt:
 class TestItDoesNotBreakTheRestApi:
     async def test_the_api_still_works_with_the_transport_enabled(self, monkeypatch, auth_headers):
         monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
-        app = create_app()
+        app = app_module.create_app()
 
         async with await _client(app) as client:
             r = await client.get("/api/health")
@@ -296,16 +294,14 @@ class TestItDoesNotBreakTheRestApi:
         FastAPI stores included routers as wrapper objects rather than flat
         paths, so `/api/health` never appears there even when it works.
         """
-        import memory_vault.mcp.http_transport as transport_mod
-
         monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
 
         def _explode():
             raise RuntimeError("transport could not be built")
 
-        monkeypatch.setattr(transport_mod, "build_mcp_http_app", _explode)
+        monkeypatch.setattr(http_transport, "build_mcp_http_app", _explode)
 
-        app = create_app()  # must not raise
+        app = app_module.create_app()  # must not raise
 
         assert _is_mounted(app) is False
 
