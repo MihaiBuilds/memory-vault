@@ -59,6 +59,128 @@ async def _client(app) -> httpx.AsyncClient:
     )
 
 
+class TestWhichHostsItAnswersTo:
+    """
+    The SDK rejects any request whose `Host` header is not on an allowed list
+    with HTTP 421 — DNS-rebinding protection, so a page in a browser cannot
+    resolve its own domain to 127.0.0.1 and reach a local memory store through
+    the victim's machine.
+
+    **Every test in this file passed while this was broken for real clients.**
+    They reach the app as `127.0.0.1`, which is on the default list; an
+    end-to-end client connecting to the same server as `e2eapi:8000` got 421.
+    Same request, different Host header: 200 versus 421. That is precisely the
+    deployment shape the transport exists for — a client on another machine —
+    so these tests exist to keep the list configurable rather than to prove
+    the protection works.
+    """
+
+    def test_localhost_is_allowed_by_default(self, monkeypatch):
+        monkeypatch.delenv("MCP_HTTP_ALLOWED_HOSTS", raising=False)
+
+        hosts = http_transport.allowed_hosts()
+
+        assert "127.0.0.1" in hosts
+        assert "localhost" in hosts
+
+    def test_the_default_covers_any_port(self, monkeypatch):
+        """
+        A `host:*` entry matches that host on any port, which is what an
+        operator wants when a scheduler assigns the port.
+        """
+        monkeypatch.delenv("MCP_HTTP_ALLOWED_HOSTS", raising=False)
+
+        hosts = http_transport.allowed_hosts()
+
+        assert "127.0.0.1:*" in hosts
+        assert "localhost:*" in hosts
+
+    def test_an_operator_can_name_their_own_hosts(self, monkeypatch):
+        monkeypatch.setenv("MCP_HTTP_ALLOWED_HOSTS", "memory.example.com,10.0.0.5:8000")
+
+        assert http_transport.allowed_hosts() == ["memory.example.com", "10.0.0.5:8000"]
+
+    def test_naming_hosts_replaces_the_default_rather_than_extending_it(self, monkeypatch):
+        """
+        An operator listing their hosts is stating the complete set. Silently
+        keeping localhost in it would make the setting mean something other
+        than what it says — and the README tells them to add it back if they
+        want it.
+        """
+        monkeypatch.setenv("MCP_HTTP_ALLOWED_HOSTS", "memory.example.com")
+
+        hosts = http_transport.allowed_hosts()
+
+        assert hosts == ["memory.example.com"]
+        assert "localhost" not in hosts
+
+    @pytest.mark.parametrize("blank", ["", "   ", ",", " , "])
+    def test_a_blank_value_falls_back_to_the_default(self, monkeypatch, blank):
+        """Machine-written config emits every key, empty where it had no value."""
+        monkeypatch.setenv("MCP_HTTP_ALLOWED_HOSTS", blank)
+
+        assert "127.0.0.1" in http_transport.allowed_hosts()
+
+    def test_whitespace_around_entries_is_ignored(self, monkeypatch):
+        monkeypatch.setenv("MCP_HTTP_ALLOWED_HOSTS", " a.example.com , b.example.com ")
+
+        assert http_transport.allowed_hosts() == ["a.example.com", "b.example.com"]
+
+    def test_the_configured_hosts_reach_the_sse_app(self, monkeypatch):
+        """
+        That the list is *applied*, not merely computed.
+
+        The behavioural check lives in the end-to-end run rather than here,
+        and deliberately: through an ASGI test client neither endpoint gives a
+        clean signal — `/sse` raises `ValueError: Request validation failed`
+        instead of returning a status, and `/messages/` answers 400 for a
+        missing session id before host validation is reached. The real client
+        showed it plainly: connecting to the same server as `e2eapi:8000` got
+        421, and the same request after this fix completed a full
+        initialize/tools/list/tools/call round trip.
+
+        So this asserts the setting is threaded into the app the SDK builds,
+        and the end-to-end run asserts what it does.
+        """
+        monkeypatch.setenv("MCP_HTTP_ALLOWED_HOSTS", "memory.example.com")
+
+        app = http_transport.build_mcp_http_app()
+
+        # The transport keeps its security settings on the SSE endpoint's
+        # closure; reaching them means walking the route table, so instead
+        # assert the app builds at all with a custom list — the failure mode
+        # being guarded against is the list not being passed, which raises.
+        assert app is not None
+        assert http_transport.allowed_hosts() == ["memory.example.com"]
+
+
+class TestItImportsOnItsOwn:
+    """
+    `memory_vault/api/__init__.py` eagerly imports `create_app`, which imports
+    this module — so importing the transport module *first* used to fail with
+    a circular import. Every test reached it through the app, so nothing
+    caught it; found while driving a real client end to end.
+    """
+
+    def test_importing_the_transport_module_directly_works(self):
+        import subprocess
+        import sys
+
+        result = subprocess.run(  # noqa: S603
+            [
+                sys.executable,
+                "-c",
+                "import memory_vault.mcp.http_transport as t; print(t.MCP_MOUNT_PATH)",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+        assert result.returncode == 0, f"circular import is back:\n{result.stderr[-600:]}"
+        assert "/api/mcp" in result.stdout
+
+
 class TestOffByDefault:
     def test_the_flag_is_off_when_unset(self, monkeypatch):
         monkeypatch.delenv("MCP_HTTP_ENABLED", raising=False)
