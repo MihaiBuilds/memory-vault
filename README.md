@@ -185,7 +185,7 @@ Three things are deliberate about this stack:
 
 ## MCP Integration (Claude Desktop & Claude Code)
 
-Memory Vault exposes four tools via the [Model Context Protocol](https://modelcontextprotocol.io/) so Claude can read and write memories during any conversation.
+Memory Vault exposes six tools via the [Model Context Protocol](https://modelcontextprotocol.io/) so Claude can read and write memories during any conversation.
 
 ### Tools
 
@@ -194,6 +194,8 @@ Memory Vault exposes four tools via the [Model Context Protocol](https://modelco
 | `recall` | Search memories with hybrid search (vector + full-text + RRF) |
 | `remember` | Store a new memory — auto-classified and embedded |
 | `forget` | Soft-delete a memory by chunk ID |
+| `purge_forgotten` | Permanently delete memories forgotten more than N days ago |
+| `move_memory` | Move a memory to another space, rebuilding its graph entries |
 | `memory_status` | Database health, chunk counts, embedding model info |
 
 ### Resources
@@ -282,6 +284,92 @@ Once configured, Claude will have access to the memory tools. Try:
 - **Server shows `failed` in Claude Code** — run `claude --debug mcp` to see the server's error output.
 - **Tools not available in Claude Code despite server connecting** — confirm `memory-vault` is listed in `enabledMcpjsonServers` in `~/.claude/settings.json`.
 - **Connection refused with Docker running** — use `DB_HOST: "127.0.0.1"` instead of `"localhost"`.
+
+### Remote access over HTTP
+
+Everything above runs MCP over stdio, which assumes the client and the server
+are on the same machine. If your client is somewhere else — Claude Desktop on
+another machine, an agent harness in a different container — Memory Vault can
+also serve MCP over HTTP using SSE.
+
+**It is off by default.** A memory store is not something to start listening on
+a port without being asked:
+
+```bash
+MCP_HTTP_ENABLED=true
+```
+
+The transport then mounts at `/api/mcp` on the same port as the REST API, so a
+client connects to `http://<host>:8000/api/mcp/sse`.
+
+**Every request needs a token**, created the same way as for the REST API:
+
+```bash
+memory-vault token create my-remote-client
+```
+
+Clients differ in how they express a remote MCP server, but they all need the
+same three things — the SSE transport, the URL, and the token. In the shape
+most of them use:
+
+```json
+{
+  "mcpServers": {
+    "memory-vault": {
+      "type": "sse",
+      "url": "http://192.168.1.50:8000/api/mcp/sse",
+      "headers": { "Authorization": "Bearer mv_your-token-here" }
+    }
+  }
+}
+```
+
+#### Say which hostnames are yours
+
+Memory Vault answers only to hostnames you have declared, and refuses anything
+else with **HTTP 421**. That check is what stops a page in a browser resolving
+its own domain to `127.0.0.1` and reaching your memory store through your
+machine.
+
+The default covers a client on the same machine (`localhost` and `127.0.0.1`,
+on any port). Reaching it by any other name — a LAN address, a container name,
+a hostname behind a reverse proxy — means saying so:
+
+```bash
+MCP_HTTP_ALLOWED_HOSTS=memory.internal:8000,192.168.1.50:8000
+```
+
+The list **replaces** the default rather than adding to it, so include
+`localhost:*` if you still want local clients. A `host:*` entry matches that
+host on any port.
+
+If a client gets `421 Misdirected Request`, this is why: the name it used is
+not on the list.
+
+#### Security
+
+**`API_AUTH_ENABLED=false` does not open the MCP transport.** That setting is a
+local-development convenience for the REST API, and it deliberately stops
+there — an unauthenticated REST API on your own laptop is a convenience, while
+an unauthenticated memory store on a listening port is how instances end up
+public. With the flag off, `/api/spaces` answers without a token and
+`/api/mcp/sse` still answers `401`.
+
+Two things worth knowing before you expose the port:
+
+- **Bind to somewhere sensible.** Publishing the container port on `0.0.0.0`
+  reaches the whole network. Bind to a LAN address or keep it behind a reverse
+  proxy or tunnel.
+- **There is no transport encryption.** Tokens travel in a header, so put TLS
+  in front of it — a reverse proxy or a tunnel — for anything crossing a
+  network you do not control.
+
+Tokens behave exactly as they do for the REST API: revoke one with
+`memory-vault token revoke <prefix>` and it stops working on both surfaces at
+once, because both check the same table.
+
+**stdio keeps working unchanged.** This is an additional way in, not a
+replacement, and enabling it changes nothing for existing clients.
 
 ---
 
