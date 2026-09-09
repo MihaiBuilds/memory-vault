@@ -64,6 +64,30 @@ class SearchResponse(BaseModel):
     query_time_ms: int
 
 
+class SearchQualityResponse(BaseModel):
+    """How well recent searches have been matching.
+
+    Computed from searches that actually happened rather than from a probe
+    query, so it reflects what people asked rather than what a synthetic
+    benchmark would.
+    """
+
+    queries: int = Field(description="Searches in the window.")
+    window_hours: int
+    avg_top_similarity: float | None = Field(
+        default=None,
+        description=(
+            "Mean best-match score across those searches. None when nothing has been searched yet."
+        ),
+    )
+    weak_matches: int = Field(
+        default=0,
+        description="Searches whose best match was below the weak threshold.",
+    )
+    empty_results: int = Field(default=0, description="Searches that returned nothing at all.")
+    weak_threshold: float = Field(description="The score below which a best match counts as weak.")
+
+
 # ---------------------------------------------------------------------------
 # Chunks
 # ---------------------------------------------------------------------------
