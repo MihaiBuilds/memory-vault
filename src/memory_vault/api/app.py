@@ -24,6 +24,7 @@ from memory_vault.api.middleware import RequestIDMiddleware
 from memory_vault.api.routers import chat, chunks, graph, health, ingest, search, spaces
 from memory_vault.config import env_int
 from memory_vault.logging_config import configure_logging
+from memory_vault.mcp.http_transport import mount_mcp_http
 from memory_vault.models.db import close_pool, init_pool
 
 configure_logging()
@@ -97,6 +98,13 @@ def create_app() -> FastAPI:
     app.include_router(ingest.router)
     app.include_router(graph.router)
     app.include_router(chat.router)
+
+    # Before the SPA fallback, and that ordering is load-bearing: Starlette
+    # matches routes in registration order and the catch-all below matches
+    # everything. Mounted after it, MCP requests would receive the React
+    # bundle with HTTP 200 rather than an error — the worst failure shape,
+    # since a client sees success and unparseable content.
+    mount_mcp_http(app)
 
     static_dir = Path(__file__).parent / "static"
     index_file = static_dir / "index.html"
