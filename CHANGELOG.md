@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-09-10
+
+The MCP server can now be reached over HTTP, so a client on another machine no
+longer needs an SSH tunnel or `docker exec` to talk to a vault running in
+Docker. Alongside it, two things that make a large vault easier to reason
+about: a warning when a space has grown big enough to hurt recall, and a
+diagnostic showing how well recent searches have actually been matching.
+
+Nothing here requires action on upgrade. The HTTP transport is off unless you
+turn it on, and `stdio` is untouched.
+
+### Added
+
+- **Serve MCP over HTTP.** Set `MCP_HTTP_ENABLED=true` and the MCP server
+  mounts at `/api/mcp` on the same port as the REST API, speaking SSE at
+  `/api/mcp/sse`. Clients that cannot spawn a local process — a harness on
+  another machine, or anything pointed at a URL rather than a command — can now
+  connect. Requested in #194.
+
+  It is **off by default**, because on by default would publish a memory store
+  on a network port. When enabled, every request needs a bearer token from
+  `memory-vault token create`: the same tokens the REST API uses, checked
+  against the same table, so revoking one revokes it everywhere.
+
+  The transport also answers only to hostnames it recognises — `localhost` and
+  `127.0.0.1` unless told otherwise — and returns **421 Misdirected Request**
+  to anything else. That is DNS-rebinding protection, and it is why reaching
+  the server by container name or LAN address fails until you say so.
+
+- **Name the hosts the transport answers to.** `MCP_HTTP_ALLOWED_HOSTS` is a
+  comma-separated list — `MCP_HTTP_ALLOWED_HOSTS=vault.internal:8000`. It
+  **replaces** the default rather than adding to it, so include `localhost:*`
+  if you still want local clients. Without this, any deployment reached by a
+  name other than localhost is unusable.
+
+- **See how well recent searches have been matching.**
+  `GET /api/search/quality` reports the average best match across the last 24
+  hours, how many searches matched weakly, and how many returned nothing. The
+  Stats page shows the same figures.
+
+  It aggregates what searching already recorded, so asking costs nothing and
+  runs no query of its own. It averages each search's *best* hit rather than
+  the mean of its top-K: search returns as many rows as you ask for whatever
+  the vault holds, so averaging down the ranks measures your `limit` as much as
+  the quality of the match.
+
+  Watch `weak_matches` rather than `empty_results`. A search that finds nothing
+  relevant still returns its closest guesses, so a vault can answer badly
+  without ever returning zero results.
+
+- **Say when a space has grown large enough to split.** Past 5,000 memories in
+  a single space, the Stats page says so. Nothing breaks at that point and
+  search keeps working — what degrades is precision, as a query competes
+  against everything in the space. Splitting by topic and searching a narrower
+  space usually helps more than tuning the query.
+
 ### Fixed
 
 - **The MCP server introduced itself without a version.** Clients that show a
@@ -14,6 +70,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   defaults it to empty and nothing was passing one. It now reports the
   installed version, read from the package so it cannot drift from the
   version bump a release already does.
+
+### Security
+
+- **`browserslist` bumped past a prototype-write advisory** (4.28.4 → 4.28.9).
+  A build-time dependency only — it never reaches the published image or the
+  production bundle — and the advisory needs an attacker-controlled stats file
+  this project does not have. Updated regardless.
+
+### Changed
+
+- Dependency updates: `psycopg` ≥3.3.5, `pydantic` ≥2.13.5, `ruff` ≥0.16.6,
+  and nine web packages including `react-router-dom` 7.18.3 and `eslint`
+  10.10.0.
 
 ## [1.5.0] — 2026-09-05
 
