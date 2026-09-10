@@ -442,6 +442,7 @@ To disable auth entirely (local dev only), set `API_AUTH_ENABLED=false`.
 | `GET`    | `/api/health`           | Service + database health (no auth) |
 | `GET`    | `/api/spaces`           | List memory spaces with chunk counts |
 | `POST`   | `/api/search`           | Hybrid search (vector + full-text + RRF) |
+| `GET`    | `/api/search/quality`   | How well recent searches have been matching |
 | `GET`    | `/api/chunks`           | List chunks with pagination and filters |
 | `GET`    | `/api/chunks/{id}`      | Get a single chunk |
 | `DELETE` | `/api/chunks/{id}`      | Soft-delete (forget) a chunk |
@@ -462,6 +463,37 @@ curl -X POST http://localhost:8000/api/search \
     "limit": 5
   }'
 ```
+
+### Example — search quality
+
+```bash
+curl http://localhost:8000/api/search/quality \
+  -H "Authorization: Bearer $MV_TOKEN"
+```
+
+```json
+{
+  "queries": 42,
+  "window_hours": 24,
+  "avg_top_similarity": 0.51,
+  "weak_matches": 6,
+  "empty_results": 0,
+  "weak_threshold": 0.35
+}
+```
+
+Aggregated from searches that already ran — asking costs nothing and runs no
+query of its own. It reports each search's *best* hit rather than the mean of
+its top-K, because a search returns as many rows as you asked for whatever the
+vault holds; averaging down the ranks measures your `limit` as much as the
+quality of the match.
+
+`weak_matches` is the number worth watching. A search that finds nothing
+relevant still returns its closest guesses, so `empty_results` stays near zero
+even when nothing is being answered well. A high weak count usually means the
+answers were never stored, rather than that search is failing to find them.
+
+The Stats page in the web UI shows the same figures.
 
 ### Example — ingest text
 

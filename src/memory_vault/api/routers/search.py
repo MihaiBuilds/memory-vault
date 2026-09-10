@@ -7,11 +7,19 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from memory_vault.api.deps import require_token
-from memory_vault.api.schemas import SearchHit, SearchRequest, SearchResponse
+from memory_vault.api.schemas import (
+    SearchHit,
+    SearchQualityResponse,
+    SearchRequest,
+    SearchResponse,
+)
 from memory_vault.services.search import (
+    SEARCH_QUALITY_WINDOW_HOURS,
+    WEAK_MATCH_SIMILARITY,
     hybrid_search,
     log_query,
     parse_since,
+    recent_search_quality,
     resolve_space_names,
 )
 
@@ -62,4 +70,23 @@ async def search(req: SearchRequest) -> SearchResponse:
         total_results=len(hits),
         query_variations=variations,
         query_time_ms=elapsed_ms,
+    )
+
+
+@router.get("/search/quality", response_model=SearchQualityResponse)
+async def search_quality() -> SearchQualityResponse:
+    """Report how well recent searches have been matching.
+
+    Read-only over what searching already recorded — it runs no query of its
+    own, so asking does not change the answer.
+    """
+    quality = await recent_search_quality()
+
+    return SearchQualityResponse(
+        queries=quality.queries,
+        window_hours=SEARCH_QUALITY_WINDOW_HOURS,
+        avg_top_similarity=quality.avg_top_similarity,
+        weak_matches=quality.weak_matches,
+        empty_results=quality.empty_results,
+        weak_threshold=WEAK_MATCH_SIMILARITY,
     )

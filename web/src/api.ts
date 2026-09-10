@@ -25,6 +25,16 @@ export interface SearchResponse {
   query_time_ms: number
 }
 
+export interface SearchQualityResponse {
+  queries: number
+  window_hours: number
+  /** Mean best-match score. Null when nothing has been searched yet. */
+  avg_top_similarity: number | null
+  weak_matches: number
+  empty_results: number
+  weak_threshold: number
+}
+
 export interface SearchRequest {
   query: string
   spaces?: string[]
@@ -276,6 +286,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  searchQuality: () => request<SearchQualityResponse>('/api/search/quality'),
 
   listChunks: (params: ListChunksParams = {}) =>
     request<ChunkList>(`/api/chunks${qs(params as Record<string, unknown>)}`),

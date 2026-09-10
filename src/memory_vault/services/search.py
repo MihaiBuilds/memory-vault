@@ -553,6 +553,71 @@ async def log_query(
         logger.exception("Failed to log query")
 
 
+# Below this, a search's best hit is not really an answer to what was asked.
+#
+# Measured against a seeded corpus rather than chosen: questions the corpus
+# could genuinely answer scored 0.51-0.58 at rank 1, while questions in the
+# same domain with no real answer present, and questions about nothing in the
+# corpus at all, scored 0.03-0.28. 0.35 sits in the empty gap between those
+# two groups, so it separates them without cutting through either.
+#
+# The gap moves with the embedding model, so this travels with
+# all-MiniLM-L6-v2 and would need re-measuring if that changed.
+WEAK_MATCH_SIMILARITY = 0.35
+
+# Matches the window memory_status and memory://stats already report over.
+SEARCH_QUALITY_WINDOW_HOURS = 24
+
+
+@dataclass(frozen=True)
+class SearchQuality:
+    """Aggregate of how well recent searches matched."""
+
+    queries: int
+    avg_top_similarity: float | None
+    weak_matches: int
+    empty_results: int
+
+
+async def recent_search_quality(
+    window_hours: int = SEARCH_QUALITY_WINDOW_HOURS,
+) -> SearchQuality:
+    """Summarise how well searches in the recent window matched.
+
+    Averages each search's best hit rather than the mean of its top-K. Search
+    returns up to `limit` rows whatever the corpus holds, so ranks below the
+    first are padding on a small or narrow vault: averaging down the ranks
+    measures how many rows were asked for as much as how well they matched,
+    and drags a good query below a bad one. The best hit is the part that
+    answers "did this find the thing".
+
+    Empty searches are counted, not averaged. `top_similarity` is NULL when a
+    search returned nothing, and AVG skips NULLs — so without a separate count
+    a vault answering nothing at all would report the average of the few
+    searches that did match, and look healthy.
+    """
+    row = await fetch_one(
+        """SELECT COUNT(*)                                        AS queries,
+                  AVG(top_similarity)                             AS avg_top,
+                  COUNT(*) FILTER (WHERE top_similarity < %s)     AS weak,
+                  COUNT(*) FILTER (WHERE result_count = 0)        AS empty
+           FROM query_log
+           WHERE created_at >= now() - make_interval(hours => %s)""",
+        (WEAK_MATCH_SIMILARITY, window_hours),
+    )
+
+    if not row or not row["queries"]:
+        return SearchQuality(queries=0, avg_top_similarity=None, weak_matches=0, empty_results=0)
+
+    avg_top = row["avg_top"]
+    return SearchQuality(
+        queries=row["queries"],
+        avg_top_similarity=round(float(avg_top), 4) if avg_top is not None else None,
+        weak_matches=row["weak"] or 0,
+        empty_results=row["empty"] or 0,
+    )
+
+
 async def resolve_space_names(names: list[str] | None) -> list[int]:
     """Convert space names to IDs."""
     if not names:

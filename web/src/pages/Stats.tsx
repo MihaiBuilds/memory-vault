@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, api } from '../api'
+import { ApiError, api, type SearchQualityResponse } from '../api'
 
 /**
  * Where a single space gets large enough to be worth splitting.
@@ -29,6 +29,11 @@ export default function StatsPage() {
     queryFn: () => api.listSpaces(),
     refetchInterval: 30_000,
   })
+  const qualityQuery = useQuery({
+    queryKey: ['search-quality'],
+    queryFn: () => api.searchQuality(),
+    refetchInterval: 30_000,
+  })
 
   const health = healthQuery.data
   const spaces = spacesQuery.data?.spaces ?? []
@@ -45,6 +50,7 @@ export default function StatsPage() {
   function refreshAll() {
     qc.invalidateQueries({ queryKey: ['health'] })
     qc.invalidateQueries({ queryKey: ['spaces'] })
+    qc.invalidateQueries({ queryKey: ['search-quality'] })
   }
 
   // Two-step delete: the first click arms the space, the second confirms.
@@ -114,6 +120,11 @@ export default function StatsPage() {
           />
         </div>
       </div>
+
+      <SearchQualityCard
+        data={qualityQuery.data}
+        loading={qualityQuery.isPending}
+      />
 
       <div className="rounded-lg border border-border bg-bg2 p-4">
         <h2 className="text-xs uppercase tracking-wider text-text2 mb-3">Spaces</h2>
@@ -211,6 +222,86 @@ export default function StatsPage() {
           </ul>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * How well recent searches have been finding things.
+ *
+ * Reports the average best match per search, not the average of each search's
+ * top-K. Search returns as many rows as were asked for whatever the corpus
+ * holds, so the lower ranks are padding on a small or narrow vault — averaging
+ * down them measures the requested limit as much as the match quality.
+ *
+ * Weak matches are the number worth watching. A search that finds nothing
+ * relevant still returns rows, so "no results" almost never happens; what
+ * happens instead is results that are not answers.
+ */
+function SearchQualityCard({
+  data,
+  loading,
+}: {
+  data?: SearchQualityResponse
+  loading: boolean
+}) {
+  const avg = data?.avg_top_similarity ?? null
+  const weakShare =
+    data && data.queries > 0 ? data.weak_matches / data.queries : 0
+
+  return (
+    <div className="rounded-lg border border-border bg-bg2 p-4">
+      <h2 className="text-xs uppercase tracking-wider text-text2 mb-3">
+        Search quality
+      </h2>
+
+      {loading ? (
+        <p className="text-sm text-text2">Loading…</p>
+      ) : !data || data.queries === 0 ? (
+        // Not a zero — nothing has been measured yet. Showing 0.00 here would
+        // read as "search is failing" on a vault nobody has searched.
+        <p className="text-sm text-text2">
+          No searches in the last {data?.window_hours ?? 24} hours yet. Run a few
+          and this fills in.
+        </p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <Metric
+              label="Avg best match"
+              value={avg === null ? '—' : avg.toFixed(2)}
+            />
+            <Metric label={`Searches (${data.window_hours}h)`} value={data.queries.toLocaleString()} />
+            <Metric label="Weak matches" value={data.weak_matches.toLocaleString()} />
+          </div>
+
+          {weakShare > 0.5 && (
+            // Amber, not red: search is working. The corpus just does not hold
+            // answers to what is being asked of it.
+            <div className="mt-3 rounded-sm border border-amber-900 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">
+              <p>
+                <span className="font-medium">
+                  {data.weak_matches} of {data.queries} searches scored below{' '}
+                  {data.weak_threshold.toFixed(2)}.
+                </span>{' '}
+                Searches always return their best guesses, so a low score means
+                the results came back without really answering the question.
+              </p>
+              <p className="mt-1 text-amber-300/80">
+                Usually this means the answers were never stored, rather than
+                that search is failing to find them.
+              </p>
+            </div>
+          )}
+
+          {data.empty_results > 0 && (
+            <p className="mt-3 text-xs text-text2">
+              {data.empty_results} search{data.empty_results === 1 ? '' : 'es'}{' '}
+              returned nothing at all.
+            </p>
+          )}
+        </>
+      )}
     </div>
   )
 }
