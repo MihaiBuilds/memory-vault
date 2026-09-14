@@ -20,7 +20,7 @@ dependencies = [
     # cannot both be supported by one import — that is why the floor sits in
     # the 2.x line at all. 2.1.1 specifically brings a request body limit to
     # the SSE endpoints, which matters once the HTTP transport lands.
-    "mcp>=2.1.1,<3.0.0",
+    "mcp>=2.2.0,<3.0.0",
     "fastapi>=0.141.1,<1",
     "uvicorn[standard]>=0.52.4,<1",
     "python-multipart>=0.0.32",
