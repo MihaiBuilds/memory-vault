@@ -346,6 +346,40 @@ host on any port.
 If a client gets `421 Misdirected Request`, this is why: the name it used is
 not on the list.
 
+#### If a client gets `405 Method Not Allowed`
+
+SSE is a two-part transport. `GET /api/mcp/sse` opens the stream, and the
+first thing the stream sends is an `endpoint` event naming a *second* URL to
+post to:
+
+```
+event: endpoint
+data: /api/mcp/messages/?session_id=80311fc8872243a6a2e15c397be63e8f
+```
+
+Every JSON-RPC message goes to that URL, not back to `/sse`. A client that
+posts to `/api/mcp/sse` instead gets `405 Method Not Allowed` with
+`allow: HEAD, GET`, because the stream endpoint only ever accepts `GET`.
+
+That is a client-side bug, and there is nothing to change on the server. To
+confirm the server is behaving, open the stream and post to the URL it hands
+back:
+
+```bash
+TOKEN=mv_your-token-here
+curl -sN -H "Authorization: Bearer $TOKEN" http://<host>:8000/api/mcp/sse
+# note the session_id from the endpoint event, then in another shell:
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}' \
+  "http://<host>:8000/api/mcp/messages/?session_id=<id>"
+```
+
+A healthy server answers `202 Accepted` and the `initialize` result arrives on
+the open stream. Two adjacent errors on that URL: `400 session_id is required`
+if the query parameter is missing, and `404 Could not find session` if the
+stream it belonged to has closed.
+
 #### Security
 
 **`API_AUTH_ENABLED=false` does not open the MCP transport.** That setting is a
