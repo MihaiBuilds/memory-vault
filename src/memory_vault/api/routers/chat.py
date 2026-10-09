@@ -339,7 +339,17 @@ async def chat(req: ChatRequest) -> ChatResponse:
                         "store": False,
                     },
                 )
-                if resp.status_code in (404, 405, 501):
+                # A 400 means the server rejected the native payload itself —
+                # LM Studio returns one for `"reasoning": "off"` on any model
+                # without reasoning config (#245). The compat payload carries no
+                # reasoning field, so falling back clears that whole class
+                # rather than just the one parameter.
+                if resp.status_code in (400, 404, 405, 501):
+                    logger.info(
+                        "Native chat endpoint rejected the request (%s); "
+                        "falling back to OpenAI-compatible endpoint",
+                        resp.status_code,
+                    )
                     use_native = False
                     resp = await client.post(
                         openai_url,
@@ -518,7 +528,12 @@ async def _stream_native_lmstudio(
     payload: dict,
 ) -> AsyncGenerator[str, None]:
     """Stream from LM Studio native /api/v1/chat. With reasoning='off' there
-    is no <think> output to filter, so we just forward content deltas."""
+    is no <think> output to filter, so we just forward content deltas.
+
+    Models that reject `reasoning` never reach here — they 400 and the caller
+    falls back to the OpenAI-compatible endpoint (#245), which does strip
+    thinking tags.
+    """
     payload = {**payload, "stream": True}
     async with client.stream("POST", url, headers=headers, json=payload) as resp:
         resp.raise_for_status()
@@ -607,7 +622,13 @@ async def chat_stream(req: ChatRequest):
                         ):
                             yield _sse({"type": "delta", "text": piece})
                     except httpx.HTTPStatusError as e:
-                        if e.response.status_code in (404, 405, 501):
+                        # Same 400 case as the non-streaming path above (#245).
+                        if e.response.status_code in (400, 404, 405, 501):
+                            logger.info(
+                                "Native chat endpoint rejected the request (%s); "
+                                "falling back to OpenAI-compatible endpoint",
+                                e.response.status_code,
+                            )
                             use_native = False
                         else:
                             raise
@@ -642,6 +663,21 @@ async def chat_stream(req: ChatRequest):
                         "message": (
                             f"Cannot connect to local LLM at {llm_base}. "
                             "Make sure LM Studio is running and a model is loaded."
+                        ),
+                    }
+                )
+            except httpx.HTTPStatusError as e:
+                # Name the status and endpoint. The generic message used to send
+                # users to the container logs for a cause the response already
+                # carried — the #245 reporter had to read LM Studio's own log to
+                # find out which parameter was refused.
+                logger.exception("LLM call failed during stream")
+                yield _sse(
+                    {
+                        "type": "error",
+                        "message": (
+                            f"LLM error: {e.response.status_code} from "
+                            f"{e.request.url}. Check the LLM server logs for details."
                         ),
                     }
                 )

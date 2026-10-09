@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1] — 2026-10-09
+
+Dashboard Chat works again with local models that have no reasoning toggle.
+
+### Fixed
+
+- **Chat failed with a 400 on models without reasoning configuration.** Chat
+  calls LM Studio's native `/api/v1/chat` first and sends `"reasoning": "off"`
+  with it. Models that expose no reasoning configuration — Gemma among them —
+  reject that parameter outright, and the fallback to the OpenAI-compatible
+  `/v1/chat/completions` only ran on 404, 405 and 501, so the 400 surfaced as
+  `LLM error` and Chat was unusable with those models. Search, ingestion and
+  MCP recall were unaffected. The fallback now also covers 400: any rejection
+  of the native payload moves the request to the compatible endpoint, which
+  sends no `reasoning` field at all, so this covers other native-only
+  parameters a future model may refuse rather than just this one. Each
+  fallback is logged. Reported by @cosmicwombat (#245).
+- **Streaming chat errors now name the cause.** `/api/chat/stream` reported
+  every failure as `LLM error. Check server logs.`, so the status code and
+  endpoint the response already carried never reached the user — diagnosing
+  the bug above meant reading the LLM server's own logs. Streaming errors now
+  include both.
+
 ## [1.6.0] — 2026-09-10
 
 The MCP server can now be reached over HTTP, so a client on another machine no
