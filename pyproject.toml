@@ -21,7 +21,7 @@ dependencies = [
     # the 2.x line at all. 2.1.1 specifically brings a request body limit to
     # the SSE endpoints, which matters once the HTTP transport lands.
     "mcp>=2.2.0,<3.0.0",
-    "fastapi>=0.141.1,<1",
+    "fastapi>=0.142.2,<1",
     "uvicorn[standard]>=0.54.0,<1",
     "python-multipart>=0.0.32",
     "pydantic>=2.13.5,<3",
