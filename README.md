@@ -290,7 +290,8 @@ Once configured, Claude will have access to the memory tools. Try:
 Everything above runs MCP over stdio, which assumes the client and the server
 are on the same machine. If your client is somewhere else — Claude Desktop on
 another machine, an agent harness in a different container — Memory Vault can
-also serve MCP over HTTP using SSE.
+also serve MCP over HTTP. It speaks both HTTP transports in the MCP spec,
+because clients split between them: SSE, and the newer Streamable HTTP.
 
 **It is off by default.** A memory store is not something to start listening on
 a port without being asked:
@@ -299,8 +300,15 @@ a port without being asked:
 MCP_HTTP_ENABLED=true
 ```
 
-The transport then mounts at `/api/mcp` on the same port as the REST API, so a
-client connects to `http://<host>:8000/api/mcp/sse`.
+Both transports then mount at `/api/mcp` on the same port as the REST API:
+
+| Transport | URL |
+|---|---|
+| Streamable HTTP | `http://<host>:8000/api/mcp/http` |
+| SSE | `http://<host>:8000/api/mcp/sse` |
+
+Use whichever your client supports. A client that speaks only one of them
+cannot fall back to the other, which is why both are there.
 
 **Every request needs a token**, created the same way as for the REST API:
 
@@ -309,8 +317,22 @@ memory-vault token create my-remote-client
 ```
 
 Clients differ in how they express a remote MCP server, but they all need the
-same three things — the SSE transport, the URL, and the token. In the shape
-most of them use:
+same three things — the transport, the URL, and the token. In the shape most
+of them use, for Streamable HTTP:
+
+```json
+{
+  "mcpServers": {
+    "memory-vault": {
+      "type": "http",
+      "url": "http://192.168.1.50:8000/api/mcp/http",
+      "headers": { "Authorization": "Bearer mv_your-token-here" }
+    }
+  }
+}
+```
+
+and for SSE:
 
 ```json
 {
@@ -323,6 +345,11 @@ most of them use:
   }
 }
 ```
+
+Clients name the transport type differently — `http` and `streamable-http`
+are both common for the first — so check what yours expects. What matters is
+that the type and the URL agree: a Streamable HTTP client pointed at the SSE
+URL gets `405`, covered below.
 
 #### Say which hostnames are yours
 
@@ -346,14 +373,53 @@ host on any port.
 If a client gets `421 Misdirected Request`, this is why: the name it used is
 not on the list.
 
+#### If a client gets `405 Method Not Allowed`
+
+The SSE endpoint accepts only `GET`, so a `405` means a client sent a `POST` to
+`/api/mcp/sse`. Two different causes produce it, and they have different fixes.
+
+**The client speaks Streamable HTTP.** A Streamable HTTP client skips the SSE
+handshake described below: it `POST`s every message straight to the URL it was
+given. Pointed at `/api/mcp/sse`, every request it makes gets `405`. Point it
+at `/api/mcp/http` instead.
+
+**The client speaks SSE but posts to the wrong URL.** SSE is a two-part
+transport. `GET /api/mcp/sse` opens the stream, and the first thing the stream
+sends is an `endpoint` event naming a *second* URL to post to:
+
+```
+event: endpoint
+data: /api/mcp/messages/?session_id=80311fc8872243a6a2e15c397be63e8f
+```
+
+Every JSON-RPC message goes to that URL, not back to `/sse`. A client that
+posts to `/sse` instead has a bug resolving that URL, and there is nothing to
+change on the server. To confirm the server is behaving, open the stream and
+post to the URL it hands back:
+
+```bash
+TOKEN=mv_your-token-here
+curl -sN -H "Authorization: Bearer $TOKEN" http://<host>:8000/api/mcp/sse
+# note the session_id from the endpoint event, then in another shell:
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}' \
+  "http://<host>:8000/api/mcp/messages/?session_id=<id>"
+```
+
+A healthy server answers `202 Accepted` and the `initialize` result arrives on
+the open stream. Two adjacent errors on that URL: `400 session_id is required`
+if the query parameter is missing, and `404 Could not find session` if the
+stream it belonged to has closed.
+
 #### Security
 
 **`API_AUTH_ENABLED=false` does not open the MCP transport.** That setting is a
 local-development convenience for the REST API, and it deliberately stops
 there — an unauthenticated REST API on your own laptop is a convenience, while
 an unauthenticated memory store on a listening port is how instances end up
-public. With the flag off, `/api/spaces` answers without a token and
-`/api/mcp/sse` still answers `401`.
+public. With the flag off, `/api/spaces` answers without a token while
+`/api/mcp/http` and `/api/mcp/sse` still answer `401`.
 
 Two things worth knowing before you expose the port:
 

@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-11-16
+
+MCP clients that speak only Streamable HTTP can now connect. The HTTP transport
+spoke SSE alone, so a client using the newer transport — one that posts every
+message straight to the URL it is given — got `405 Method Not Allowed` on every
+request.
+
+Nothing here requires action on upgrade. The HTTP transport is still off unless
+you turn it on, the SSE endpoints are where they were, and `stdio` is
+untouched.
+
+### Added
+
+- **Streamable HTTP at `/api/mcp/http`.** With `MCP_HTTP_ENABLED=true`, the
+  MCP server now answers both HTTP transports in the MCP spec: Streamable HTTP
+  at `/api/mcp/http`, and SSE at `/api/mcp/sse` as before. Both are served by
+  the same server, so they share the tools, the bearer tokens from
+  `memory-vault token create`, and the hostname allow-list. A request without a
+  valid token gets `401` on either, `API_AUTH_ENABLED=false` opens neither, and
+  an unrecognised `Host` gets `421`.
+
+  A transport that fails to build still leaves the REST API and dashboard
+  serving, as it did before. Streamable HTTP needs work at startup that SSE
+  does not, and that work only runs once the transport has actually been
+  built, so a broken transport cannot stop the app from starting.
+
+### Documentation
+
+- **README: what a `405` from the MCP transport means.** Two different causes
+  produce it — a Streamable HTTP client pointed at the SSE URL, and an SSE
+  client posting back to `/sse` instead of the URL the stream hands it — with
+  a `curl` recipe for checking the second. The remote-access section now gives
+  both URLs and a client config for each.
+
+### Contributors
+
+- @TyanColte requested the transport (#268) after tracing a client's `405`s to
+  it speaking only Streamable HTTP, which also corrected an earlier diagnosis
+  in #239, and proposed the design it is built on.
+
 ## [1.6.1] — 2026-10-09
 
 Dashboard Chat works again with local models that have no reasoning toggle.

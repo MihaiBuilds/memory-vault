@@ -5,6 +5,11 @@ same machine. Remote harnesses cannot attach without an SSH tunnel or routing
 stdio through `docker exec`. This mounts the same tools at `/api/mcp` so a
 client elsewhere on the network can reach them.
 
+Two transports share that mount, because clients split between them: SSE at
+`/api/mcp/sse`, and Streamable HTTP — the newer one in the MCP spec — at
+`/api/mcp/http`. A client that speaks only one of them cannot fall back to the
+other.
+
 Off unless `MCP_HTTP_ENABLED` says otherwise. A memory store is not something
 to start listening on a port by default.
 """
@@ -13,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from starlette.applications import Starlette
 
@@ -34,6 +40,11 @@ logger = logging.getLogger(__name__)
 # dashboard with HTTP 200 instead of failing loudly, and a client would see
 # HTML where it expected an event stream. `test_mcp_http_mount.py` pins this.
 MCP_MOUNT_PATH = "/api/mcp"
+
+# Where Streamable HTTP lives inside that mount, so clients use
+# `/api/mcp/http`. Everything else under the mount stays with SSE, which keeps
+# `/sse` and `/messages/` exactly where existing clients expect them.
+STREAMABLE_HTTP_PATH = "/http"
 
 # Where the transport tells clients it lives. Only used to populate the OAuth
 # resource-metadata document the SDK serves; MV issues tokens with
@@ -92,20 +103,62 @@ def http_transport_enabled() -> bool:
     return raw.strip().lower() not in ("false", "0", "no")
 
 
-def build_mcp_http_app() -> Starlette:
-    """Build the SSE transport app, with authentication wired in.
+def _route_path(scope) -> str:
+    """The request path relative to the mount, the way Starlette's router sees it.
 
-    SSE rather than `streamable-http`: the transport standard clients document
-    and support today. Both are available in the SDK and both return mountable
-    apps, so adding the newer one later is a second mount rather than a
-    migration.
+    A mounted app is handed the full path, with the mount prefix carried in
+    `root_path`, so the prefix has to come off before comparing.
+    """
+    path = scope.get("path", "")
+    root = scope.get("root_path", "")
+    if root and path.startswith(root):
+        path = path[len(root) :]
+    return path or "/"
+
+
+class TransportRouter:
+    """Send the Streamable HTTP path to that transport and everything else to SSE.
+
+    Both transports sit under one mount. Two separate mounts would also work,
+    but only in one registration order: with `/api/mcp` registered first, a
+    mount nested at `/api/mcp/http` is never reached — the outer mount claims
+    every path beneath it and its SSE app answers 404. That was measured
+    against the SDK rather than assumed. Routing by exact path inside a single
+    mount takes registration order out of the picture.
+
+    Each transport stays the app the SDK built, with its own auth middleware.
+    Merging their route lists into one app would look tidier and quietly drop
+    that middleware.
+    """
+
+    def __init__(self, sse_app: Starlette, streamable_app: Starlette, session_manager) -> None:
+        self.sse_app = sse_app
+        self.streamable_app = streamable_app
+        self.session_manager = session_manager
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http" and _route_path(scope) == STREAMABLE_HTTP_PATH:
+            await self.streamable_app(scope, receive, send)
+            return
+        await self.sse_app(scope, receive, send)
+
+
+def build_mcp_http_app() -> TransportRouter:
+    """Build both transport apps, with authentication wired in.
+
+    SSE came first because it was the transport clients documented and
+    supported when MCP over HTTP was added. Clients have since appeared that
+    speak only Streamable HTTP: they `POST` straight to the URL they were
+    given, which the SSE endpoint answers with 405. Both transports come from
+    the same server instance, so they share one set of tools, one token
+    verifier and one Host allow-list.
 
     `AuthSettings` is not optional here, and the SDK enforces that — passing a
     `token_verifier` without it raises `ValueError`. That is worth knowing
     because the alternative would have been the dangerous shape: a verifier
     that looks configured while `RequireAuthMiddleware` is never applied,
-    leaving the endpoints open. With both set, `/sse` and `/messages` are each
-    wrapped in `RequireAuthMiddleware`.
+    leaving the endpoints open. With both set, `/sse`, `/messages` and `/http`
+    are each wrapped in `RequireAuthMiddleware`.
     """
     # Imported here rather than at module scope: importing the MCP server
     # module builds the tool registry and pulls in the embedding stack, which
@@ -169,7 +222,19 @@ def build_mcp_http_app() -> Starlette:
         allowed_origins=[f"http://{h}" for h in hosts] + [f"https://{h}" for h in hosts],
     )
 
-    return http_server.sse_app(transport_security=security)
+    sse_app = http_server.sse_app(transport_security=security)
+
+    # The router hands requests over with the scope unchanged, so the SDK has
+    # to be looking for the same path the router matched on. Left at its
+    # default of `/mcp`, every request the router sent here would 404.
+    streamable_app = http_server.streamable_http_app(
+        streamable_http_path=STREAMABLE_HTTP_PATH,
+        transport_security=security,
+    )
+
+    # Read only after `streamable_http_app()`: the SDK creates the session
+    # manager lazily and raises `RuntimeError` if it is asked for first.
+    return TransportRouter(sse_app, streamable_app, http_server.session_manager)
 
 
 def mount_mcp_http(app) -> bool:
@@ -185,7 +250,8 @@ def mount_mcp_http(app) -> bool:
         return False
 
     try:
-        app.mount(MCP_MOUNT_PATH, build_mcp_http_app())
+        transport = build_mcp_http_app()
+        app.mount(MCP_MOUNT_PATH, transport)
     except Exception:
         # A transport that fails to build must not stop the REST API from
         # serving. The operator asked for it, so this is loud — but the
@@ -197,9 +263,42 @@ def mount_mcp_http(app) -> bool:
         )
         return False
 
+    # Stored only once the mount has succeeded, and that ordering is the
+    # point: `mcp_http_lifespan` runs whatever is stored here. Had it been
+    # keyed to `MCP_HTTP_ENABLED` instead, a failed build above would leave it
+    # asking the SDK for a session manager that was never created — which
+    # raises at startup and takes the REST API down with it, undoing the
+    # guarantee the `except` above exists to make.
+    app.state.mcp_session_manager = transport.session_manager
+
     logger.info(
-        "MCP HTTP transport mounted at %s (SSE). Requests require a bearer "
-        "token regardless of API_AUTH_ENABLED.",
+        "MCP HTTP transport mounted: Streamable HTTP at %s%s, SSE at %s/sse. "
+        "Requests require a bearer token regardless of API_AUTH_ENABLED.",
+        MCP_MOUNT_PATH,
+        STREAMABLE_HTTP_PATH,
         MCP_MOUNT_PATH,
     )
     return True
+
+
+@asynccontextmanager
+async def mcp_http_lifespan(app):
+    """Run the Streamable HTTP session manager for as long as the app runs.
+
+    SSE needs nothing at startup. Streamable HTTP does: its session manager
+    owns the task group every request runs in, and until `run()` has been
+    entered each request fails with `RuntimeError: Task group is not
+    initialized` — a 500. A mounted app's own lifespan is never run by its
+    parent, so the parent has to do it.
+
+    Does nothing when no manager was stored: the transport is off, or it
+    failed to build. Kept separate from the app's lifespan so it can be
+    entered without also opening and closing the database pool.
+    """
+    manager = getattr(app.state, "mcp_session_manager", None)
+    if manager is None:
+        yield
+        return
+
+    async with manager.run():
+        yield
