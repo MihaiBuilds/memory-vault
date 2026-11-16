@@ -30,6 +30,8 @@ that list, so the ordering and the prefix are both pinned below.
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 
@@ -41,6 +43,37 @@ from memory_vault.api import app as app_module
 from memory_vault.mcp import http_transport
 
 MCP_MOUNT_PATH = http_transport.MCP_MOUNT_PATH
+STREAMABLE_URL = MCP_MOUNT_PATH + http_transport.STREAMABLE_HTTP_PATH
+
+# What a Streamable HTTP client sends first. The `Accept` header is part of the
+# protocol, not decoration: the transport answers with an event stream and
+# refuses clients that do not say they can read one.
+_INITIALIZE = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2025-03-26",
+        "capabilities": {},
+        "clientInfo": {"name": "test-suite", "version": "0"},
+    },
+}
+_STREAMABLE_HEADERS = {
+    "Accept": "application/json, text/event-stream",
+    "Content-Type": "application/json",
+}
+
+
+def _sse_json(response: httpx.Response) -> dict:
+    """The JSON-RPC message carried in a Streamable HTTP response's event stream."""
+    for line in response.text.splitlines():
+        if line.startswith("data: "):
+            return json.loads(line[len("data: ") :])
+    raise AssertionError(f"no data line in the response: {response.text[:200]!r}")
+
+
+async def _noop(*_args, **_kwargs) -> None:
+    return None
 
 
 def _route_paths(app) -> list[str]:
@@ -51,12 +84,19 @@ def _is_mounted(app) -> bool:
     return any(MCP_MOUNT_PATH in p for p in _route_paths(app))
 
 
-async def _client(app) -> httpx.AsyncClient:
+async def _client(app, base_url: str = "http://test") -> httpx.AsyncClient:
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
-        base_url="http://test",
+        base_url=base_url,
         follow_redirects=False,
     )
+
+
+# A request that has to get *past* the Host check must arrive under a name on
+# the default allow-list. The suite's usual `http://test` is not on it, which is
+# harmless for tests that stop at a 401 — auth answers first — but turns every
+# request meant to succeed into a 421.
+_LOCAL = "http://127.0.0.1:8000"
 
 
 class TestWhichHostsItAnswersTo:
@@ -217,6 +257,17 @@ class TestOffByDefault:
 
         assert _is_mounted(app_module.create_app()) is True
 
+    def test_no_session_manager_is_stored_when_off(self, monkeypatch):
+        """
+        The lifespan runs whatever `mount_mcp_http` stored. With the
+        transport off there must be nothing to run.
+        """
+        monkeypatch.delenv("MCP_HTTP_ENABLED", raising=False)
+
+        app = app_module.create_app()
+
+        assert getattr(app.state, "mcp_session_manager", None) is None
+
 
 class TestTheAuthFlagDoesNotReachIt:
     """
@@ -250,9 +301,27 @@ class TestTheAuthFlagDoesNotReachIt:
 
         assert r.status_code == 401
 
+    async def test_the_streamable_transport_is_not_opened_either(self, monkeypatch):
+        """
+        The same property, for the second transport. It shares the server
+        instance and so the verifier, but that is an implementation detail —
+        the property is what a client sees, so it is measured over HTTP with
+        the session manager running.
+        """
+        monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
+        monkeypatch.setenv("API_AUTH_ENABLED", "false")
+        app = app_module.create_app()
+
+        async with http_transport.mcp_http_lifespan(app), await _client(app, _LOCAL) as client:
+            rest = await client.get("/api/spaces")
+            mcp = await client.post(STREAMABLE_URL, json=_INITIALIZE, headers=_STREAMABLE_HEADERS)
+
+        assert rest.status_code == 200, "precondition: the REST escape hatch works"
+        assert mcp.status_code == 401, "disabling REST auth must not open Streamable HTTP"
+
 
 class TestUnauthenticatedRequestsAreRefused:
-    @pytest.mark.parametrize("path", ["/sse", "/messages/"])
+    @pytest.mark.parametrize("path", ["/sse", "/messages/", "/http"])
     async def test_no_token_is_401(self, monkeypatch, path):
         monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
         app = app_module.create_app()
@@ -309,22 +378,26 @@ class TestUnauthenticatedRequestsAreRefused:
         with pytest.raises(ValueError, match="without auth settings"):
             MCPServer("probe", token_verifier=DatabaseTokenVerifier())
 
-    def test_both_endpoints_are_wrapped_in_the_auth_middleware(self):
+    def test_every_endpoint_is_wrapped_in_the_auth_middleware(self):
         """
-        Asserts on the built app rather than over HTTP, so a future SDK change
+        Asserts on the built apps rather than over HTTP, so a future SDK change
         that stops wrapping an endpoint is caught even if some other layer
-        happens to return 401.
+        happens to return 401. Both transports are walked: they are separate
+        apps the SDK built, so wrapping one says nothing about the other.
         """
-        app = http_transport.build_mcp_http_app()
+        transport = http_transport.build_mcp_http_app()
 
         guarded = {}
-        for route in app.routes:
-            path = getattr(route, "path", None)
-            endpoint = getattr(route, "endpoint", None) or getattr(route, "app", None)
-            if path in ("/sse", "/messages"):
-                guarded[path] = type(endpoint).__name__
+        for app in (transport.sse_app, transport.streamable_app):
+            for route in app.routes:
+                path = getattr(route, "path", None)
+                endpoint = getattr(route, "endpoint", None) or getattr(route, "app", None)
+                if path in ("/sse", "/messages", http_transport.STREAMABLE_HTTP_PATH):
+                    guarded[path] = type(endpoint).__name__
 
-        assert guarded, "expected /sse and /messages routes to exist"
+        assert set(guarded) == {"/sse", "/messages", http_transport.STREAMABLE_HTTP_PATH}, (
+            f"expected all three endpoints to exist, found {sorted(guarded)}"
+        )
         for path, wrapper in guarded.items():
             assert "RequireAuth" in wrapper, (
                 f"{path} is not behind RequireAuthMiddleware: {wrapper}"
@@ -431,3 +504,157 @@ class TestItDoesNotBreakTheRestApi:
             r = await client.get("/api/health")
 
         assert r.status_code == 200, "the REST API must survive a transport failure"
+
+    async def test_a_transport_failure_does_not_stop_startup_either(self, monkeypatch):
+        """
+        The failure the test above cannot see, because it never runs a
+        lifespan. Streamable HTTP adds work at startup — entering the session
+        manager — and the obvious way to gate that is on `MCP_HTTP_ENABLED`.
+        But the flag only says the operator asked for the transport, not that
+        it was built. Gated on the flag, a failed build leaves startup asking
+        the SDK for a session manager that never existed; the SDK raises, the
+        app never starts, and the REST API goes down with the transport.
+
+        So this runs the app's real lifespan, with only the database pool
+        stubbed out — the suite owns one pool for the whole session, and the
+        real lifespan would close it.
+        """
+        monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
+        monkeypatch.setattr(app_module, "init_pool", _noop)
+        monkeypatch.setattr(app_module, "close_pool", _noop)
+
+        def _explode():
+            raise RuntimeError("transport could not be built")
+
+        monkeypatch.setattr(http_transport, "build_mcp_http_app", _explode)
+
+        app = app_module.create_app()
+        assert getattr(app.state, "mcp_session_manager", None) is None
+
+        async with app.router.lifespan_context(app), await _client(app) as client:
+            r = await client.get("/api/health")
+
+        assert r.status_code == 200, "startup must survive a transport that failed to build"
+
+
+class TestStreamableHttp:
+    """
+    The second transport. Some clients speak only Streamable HTTP: they never
+    open the SSE stream, and `POST` straight to the URL they were given — which
+    the SSE endpoint answers with 405. This one is for them.
+
+    These run with the session manager entered, because nothing else is
+    realistic: the HTTP test client does not run lifespans, and without one
+    every request fails before reaching any of the behaviour asserted here.
+    """
+
+    def test_the_url_is_pinned(self):
+        """
+        Clients are configured with this URL by hand, and the README gives it.
+        Moving it would break every one of them without a single test failing
+        anywhere else.
+        """
+        assert STREAMABLE_URL == "/api/mcp/http"
+
+    async def test_a_client_can_initialize_and_list_tools(self, monkeypatch, auth_headers):
+        monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
+        app = app_module.create_app()
+        headers = {**_STREAMABLE_HEADERS, **auth_headers}
+
+        async with http_transport.mcp_http_lifespan(app), await _client(app, _LOCAL) as client:
+            init = await client.post(STREAMABLE_URL, json=_INITIALIZE, headers=headers)
+            session = {
+                **headers,
+                "mcp-session-id": init.headers["mcp-session-id"],
+                "mcp-protocol-version": "2025-03-26",
+            }
+            await client.post(
+                STREAMABLE_URL,
+                json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+                headers=session,
+            )
+            listed = await client.post(
+                STREAMABLE_URL,
+                json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+                headers=session,
+            )
+
+        assert init.status_code == 200
+        assert _sse_json(init)["result"]["protocolVersion"] == "2025-03-26"
+        assert listed.status_code == 200
+        names = {tool["name"] for tool in _sse_json(listed)["result"]["tools"]}
+        assert {"recall", "remember", "forget", "memory_status"} <= names, (
+            f"the tools stdio clients get should be here too, found {sorted(names)}"
+        )
+
+    @pytest.mark.parametrize(
+        "authorization", [None, "Bearer mv_not-real"], ids=["no-token", "bad-token"]
+    )
+    async def test_unauthenticated_requests_are_refused(self, monkeypatch, authorization):
+        monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
+        app = app_module.create_app()
+        headers = dict(_STREAMABLE_HEADERS)
+        if authorization:
+            headers["Authorization"] = authorization
+
+        async with http_transport.mcp_http_lifespan(app), await _client(app, _LOCAL) as client:
+            r = await client.post(STREAMABLE_URL, json=_INITIALIZE, headers=headers)
+
+        assert r.status_code == 401
+
+    async def test_a_host_that_is_not_allowed_is_refused(self, monkeypatch, auth_headers):
+        """DNS-rebinding protection applies here exactly as it does to SSE."""
+        monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
+        monkeypatch.delenv("MCP_HTTP_ALLOWED_HOSTS", raising=False)
+        app = app_module.create_app()
+        headers = {**_STREAMABLE_HEADERS, **auth_headers, "Host": "evil.example"}
+
+        async with http_transport.mcp_http_lifespan(app), await _client(app, _LOCAL) as client:
+            r = await client.post(STREAMABLE_URL, json=_INITIALIZE, headers=headers)
+
+        assert r.status_code == 421
+
+    async def test_the_sse_endpoint_is_unchanged(self, monkeypatch, auth_headers):
+        """
+        Adding a transport must not change the existing one. A `POST` to the
+        SSE stream is still refused the way it always was — which is also the
+        exact response a Streamable-HTTP-only client gets when pointed at the
+        wrong URL, and what the README's 405 section describes.
+        """
+        monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
+        app = app_module.create_app()
+        headers = {**_STREAMABLE_HEADERS, **auth_headers}
+
+        async with http_transport.mcp_http_lifespan(app), await _client(app, _LOCAL) as client:
+            r = await client.post(f"{MCP_MOUNT_PATH}/sse", json=_INITIALIZE, headers=headers)
+
+        assert r.status_code == 405
+        # Compared as a set: Starlette builds this header from an unordered
+        # set, and the order measurably differs between runs.
+        assert {m.strip() for m in r.headers["allow"].split(",")} == {"GET", "HEAD"}
+
+    async def test_the_app_lifespan_runs_the_session_manager(self, monkeypatch, auth_headers):
+        """
+        The wiring, measured end to end through the app's real lifespan with
+        only the database pool stubbed.
+
+        The first half is the precondition that makes the second half mean
+        anything: without the session manager running, a request fails. If a
+        future SDK stopped needing it, the second half would pass whether or
+        not the lifespan was wired at all.
+        """
+        monkeypatch.setenv("MCP_HTTP_ENABLED", "true")
+        monkeypatch.setattr(app_module, "init_pool", _noop)
+        monkeypatch.setattr(app_module, "close_pool", _noop)
+        headers = {**_STREAMABLE_HEADERS, **auth_headers}
+
+        unstarted = app_module.create_app()
+        async with await _client(unstarted, _LOCAL) as client:
+            with pytest.raises(RuntimeError, match="Task group is not initialized"):
+                await client.post(STREAMABLE_URL, json=_INITIALIZE, headers=headers)
+
+        app = app_module.create_app()
+        async with app.router.lifespan_context(app), await _client(app, _LOCAL) as client:
+            r = await client.post(STREAMABLE_URL, json=_INITIALIZE, headers=headers)
+
+        assert r.status_code == 200, "the app's lifespan must start the session manager"

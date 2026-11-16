@@ -24,7 +24,7 @@ from memory_vault.api.middleware import RequestIDMiddleware
 from memory_vault.api.routers import chat, chunks, graph, health, ingest, search, spaces
 from memory_vault.config import env_int
 from memory_vault.logging_config import configure_logging
-from memory_vault.mcp.http_transport import mount_mcp_http
+from memory_vault.mcp.http_transport import mcp_http_lifespan, mount_mcp_http
 from memory_vault.models.db import close_pool, init_pool
 
 configure_logging()
@@ -36,7 +36,11 @@ async def _lifespan(app: FastAPI):
     await init_pool(min_size=2, max_size=10)
     logger.info("API started — database pool ready")
     try:
-        yield
+        # The Streamable HTTP transport cannot serve a request until its
+        # session manager is running, and a mounted app's own lifespan is never
+        # run for it. A no-op when the transport is off or failed to build.
+        async with mcp_http_lifespan(app):
+            yield
     finally:
         await close_pool()
         logger.info("API stopped — database pool closed")
